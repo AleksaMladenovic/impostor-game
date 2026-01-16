@@ -38,6 +38,34 @@ ScaffoldingReadMe.txt
 
 # Others
 ~$*
+# Visual Studio IDE files
+.vs/
+*.suo
+*.user
+*.futdcache.v2
+*.dbmdl
+*.cache
+*.log
+*.pdb
+*.vscode/
+*.swp
+*.bak
+*.tmp
+*.ncb
+*.opendb
+*.VC.db
+*.VC.opendb
+*.pidb
+*.sdf
+*.psess
+*.vsp
+*.vspscc
+*.vssscc
+*.v12.suo
+*.DS_Store
+*.idea/
+*.DocumentLayout.json
+*.DocumentLayout.backup.json
 *~
 CodeCoverage/
 
