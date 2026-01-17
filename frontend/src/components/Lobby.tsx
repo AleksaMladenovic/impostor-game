@@ -17,7 +17,7 @@ const Lobby = () => {
     const [connection, setConnection] = useState<HubConnection | null>(null);
     const [players, setPlayers] = useState<Player[]>([]);
     const [copied, setCopied] = useState(false);
-    const {roomId} = useParams();
+    const { roomId } = useParams();
     const user = useAuth().user;
     const username = user?.username;
     // Funkcija za kopiranje ID-a
@@ -46,7 +46,7 @@ const Lobby = () => {
                     });
                     connection.on("Error", (message: string) => {
                         alert(message);
-                        window.location.reload(); 
+                        window.location.reload();
                     });
                 })
                 .catch(e => console.error('SignalR Greška: ', e));
@@ -56,35 +56,39 @@ const Lobby = () => {
     // Proveravamo da li je trenutni korisnik Host
     const isCurrentUserHost = players.find(p => p.username === username)?.isHost;
 
+    const handleNapusti = () => {
+        // Logika za napuštanje sobe
+    };
+
     return (
         <div className="min-h-screen bg-[#0a0a0c] text-white font-sans p-4 md:p-8 relative overflow-hidden">
             {/* Ambientalne animacije u pozadini */}
-           <div className="absolute inset-0 pointer-events-none overflow-hidden z-0">
-    {/* Plavi krug - sada je svetliji (600) i jači (25%) */}
-    <motion.div 
-        animate={{ 
-            x: [0, 80, 0], 
-            y: [0, 40, 0],
-            scale: [1, 1.2, 1] 
-        }}
-        transition={{ duration: 15, repeat: Infinity, ease: "easeInOut" }}
-        className="absolute top-[-15%] left-[-10%] w-[70%] h-[70%] bg-blue-600/25 blur-[130px] rounded-full"
-    />
-    
-    {/* Crveni krug - sada je svetliji (600) i jači (20%) */}
-    <motion.div 
-        animate={{ 
-            x: [0, -60, 0], 
-            y: [0, 80, 0],
-            scale: [1, 1.1, 1] 
-        }}
-        transition={{ duration: 20, repeat: Infinity, ease: "easeInOut" }}
-        className="absolute bottom-[-15%] right-[-10%] w-[70%] h-[70%] bg-red-600/20 blur-[130px] rounded-full"
-    />
-</div>
+            <div className="absolute inset-0 pointer-events-none overflow-hidden z-0">
+                {/* Plavi krug - sada je svetliji (600) i jači (25%) */}
+                <motion.div
+                    animate={{
+                        x: [0, 80, 0],
+                        y: [0, 40, 0],
+                        scale: [1, 1.2, 1]
+                    }}
+                    transition={{ duration: 15, repeat: Infinity, ease: "easeInOut" }}
+                    className="absolute top-[-15%] left-[-10%] w-[70%] h-[70%] bg-blue-600/25 blur-[130px] rounded-full"
+                />
+
+                {/* Crveni krug - sada je svetliji (600) i jači (20%) */}
+                <motion.div
+                    animate={{
+                        x: [0, -60, 0],
+                        y: [0, 80, 0],
+                        scale: [1, 1.1, 1]
+                    }}
+                    transition={{ duration: 20, repeat: Infinity, ease: "easeInOut" }}
+                    className="absolute bottom-[-15%] right-[-10%] w-[70%] h-[70%] bg-red-600/20 blur-[130px] rounded-full"
+                />
+            </div>
 
             <div className="max-w-6xl mx-auto relative z-10">
-                
+
                 {/* TOP BAR - Room Info */}
                 <header className="flex flex-col md:flex-row justify-between items-center mb-12 gap-6 bg-white/5 border border-white/10 p-6 rounded-[2rem] backdrop-blur-xl">
                     <div className="flex items-center gap-4">
@@ -100,7 +104,7 @@ const Lobby = () => {
                     <div className="flex items-center gap-3 bg-black/40 px-6 py-3 rounded-2xl border border-white/5">
                         <span className="text-gray-500 text-xs font-bold tracking-widest uppercase">ID Sobe:</span>
                         <span className="font-mono text-xl text-blue-400 font-bold tracking-widest">{roomId}</span>
-                        <button 
+                        <button
                             onClick={copyToClipboard}
                             className="ml-2 p-2 hover:bg-white/10 rounded-lg transition-all"
                         >
@@ -108,8 +112,8 @@ const Lobby = () => {
                         </button>
                     </div>
 
-                    <button 
-                        onClick={() => window.location.reload()}
+                    <button
+                        onClick={handleNapusti}
                         className="flex items-center gap-2 px-6 py-3 bg-red-500/10 text-red-400 rounded-xl hover:bg-red-500/20 transition-all font-bold text-sm uppercase"
                     >
                         <LogOut size={18} /> Napusti
@@ -117,13 +121,13 @@ const Lobby = () => {
                 </header>
 
                 <div className="grid lg:grid-cols-3 gap-8">
-                    
+
                     {/* Lista igrača */}
                     <div className="lg:col-span-2 space-y-4">
                         <h2 className="text-sm font-bold uppercase tracking-widest text-gray-500 mb-6 flex items-center gap-2">
                             Igrači u sobi <span className="bg-white/10 px-2 py-0.5 rounded text-[10px]">{players.length}/5</span>
                         </h2>
-                        
+
                         <div className="grid sm:grid-cols-2 gap-4">
                             <AnimatePresence>
                                 {players.map((player) => (
@@ -169,9 +173,9 @@ const Lobby = () => {
                         <div className="bg-gradient-to-b from-white/[0.07] to-transparent border border-white/10 p-8 rounded-[2rem] text-center">
                             <h3 className="text-xl font-black italic mb-2 uppercase tracking-tighter">Status Partije</h3>
                             <p className="text-gray-500 text-sm mb-8">Čekamo da Host pokrene igru...</p>
-                            
+
                             {isCurrentUserHost ? (
-                                <motion.button 
+                                <motion.button
                                     whileHover={{ scale: 1.03 }}
                                     whileTap={{ scale: 0.97 }}
                                     className="w-full py-5 bg-white text-black font-black rounded-2xl flex items-center justify-center gap-3 shadow-[0_0_30px_rgba(255,255,255,0.15)] hover:bg-gray-200 transition-all uppercase tracking-widest"
