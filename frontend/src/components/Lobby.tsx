@@ -166,7 +166,7 @@ const Lobby = ({ roomId, username }: LobbyProps) => {
                     {/*  Game Controls / Chat Placeholder */}
                     <div className="space-y-6">
                         <div className="bg-gradient-to-b from-white/[0.07] to-transparent border border-white/10 p-8 rounded-[2rem] text-center">
-                            <h3 className="text-xl font-black italic mb-2 uppercase italic tracking-tighter">Status Partije</h3>
+                            <h3 className="text-xl font-black italic mb-2 uppercase tracking-tighter">Status Partije</h3>
                             <p className="text-gray-500 text-sm mb-8">Čekamo da Host pokrene igru...</p>
                             
                             {isCurrentUserHost ? (
