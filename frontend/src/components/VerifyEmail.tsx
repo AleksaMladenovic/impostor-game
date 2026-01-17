@@ -3,12 +3,14 @@ import { useNavigate } from "react-router-dom";
 import { auth } from "./firebase";
 import { reload, sendEmailVerification } from "firebase/auth";
 import { motion, AnimatePresence } from "framer-motion";
+import { useAuth } from "../context/AuthContext";
 
 const VerifyEmail = () => {
     const [checking, setChecking] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [resending, setResending] = useState(false);
     const navigate = useNavigate();
+    const {setVerified} = useAuth();
 
     useEffect(() => {
         const interval = setInterval(async () => {
@@ -17,6 +19,7 @@ const VerifyEmail = () => {
                 try {
                     await reload(user);
                     if (user.emailVerified) {
+                        setVerified(true);
                         clearInterval(interval);
                         navigate("/game"); // Ili /complete-profile zavisno od tvog flow-a
                     }

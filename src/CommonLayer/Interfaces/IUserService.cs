@@ -8,10 +8,12 @@ using MyApp.CommonLayer.Models;
 
 namespace CommonLayer.Interfaces;
 
+
 public interface IUserService
 {
     GetUserResponse? GetUserById(string userId);
     Task CreateAsync(CreateUserInput user);
+    Task<bool> UsernameAlreadyExist(string username);
     Task UpdateAsync(User user);
     Task IncrementPlayedGames(string userId);
     Task IncrementWinsLikeCrewmate(string userId);

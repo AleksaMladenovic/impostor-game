@@ -65,6 +65,13 @@ builder.Services.AddSingleton<Cassandra.ISession>(sp =>
             total_score counter
         );"
     );
+
+    session.Execute(@"
+        CREATE TABLE IF NOT EXISTS user_by_username (
+            username text PRIMARY KEY,
+            user_id text
+        ); 
+    ");
     session.ChangeKeyspace("impostor_game");
     return session;
 });

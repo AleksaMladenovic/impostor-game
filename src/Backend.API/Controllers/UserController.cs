@@ -62,6 +62,11 @@ namespace Backend.Controllers
             return Ok();
         }
 
-
+        [HttpGet("usernameAlreadyExists/{username}")]
+        public IActionResult UsernameAlreadyExist(string username)
+        {
+            var exists = _userService.UsernameAlreadyExist(username).Result;
+            return Ok(exists);
+        }
     }
 }

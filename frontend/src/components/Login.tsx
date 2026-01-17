@@ -20,7 +20,7 @@ const Login = () => {
             await signInWithEmailAndPassword(auth, email, password);
             const user = auth.currentUser;
             if (user) {
-                login({ id: user.uid, email: user.email! });
+                login({ id: user.uid, email: user.email!, emailVerified: user.emailVerified });
                 navigate("/");
             }
         } catch (err: any) {

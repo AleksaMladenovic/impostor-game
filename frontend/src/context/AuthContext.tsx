@@ -5,10 +5,8 @@ import { getAuth, signOut } from "firebase/auth";
 export interface User {
 	id: string;
 	email: string;
-    fname?: string;
-    lname?: string;
-    phone?: string;
-	// Dodaj još polja po potrebi
+	username?: string;
+	emailVerified?: boolean;
 }
 
 // 2. Definiši tip contexta
@@ -18,6 +16,7 @@ interface AuthContextType {
 	logout: () => void;
     loggedUser: () => boolean;
     completeUser: (fname: string, lname: string, phone: string) => void;
+	setVerified: (verified: boolean) => void;
 }
 
 // 3. Kreiraj context
@@ -67,8 +66,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         }
     };
 
+	const setVerified = (verified: boolean) => {
+		if (user) {
+			const updatedUser = { ...user, emailVerified: verified };
+			setUser(updatedUser);
+		}
+	};
+
 	return (
-		<AuthContext.Provider value={{ user, login, logout, loggedUser, completeUser }}>
+		<AuthContext.Provider value={{ user, login, logout, loggedUser, completeUser, setVerified }}>
 			{children}
 		</AuthContext.Provider>
 	);

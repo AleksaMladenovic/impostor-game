@@ -16,10 +16,10 @@ namespace DatabaseLayer.Repositories
         private readonly ISession _session;
 
         private PreparedStatement? _getUserByIdStatement;
-        private PreparedStatement? _getUserStats;
+        private PreparedStatement? _getUserStatsStatement;
         private PreparedStatement? _createUserStatement;
-        private PreparedStatement? _initializeUserStatsStatement;
-        private PreparedStatement? _updateUserStatement;
+        private PreparedStatement? _insertUserNameStatement;
+        private PreparedStatement? _usernameAlreadyExistStatement;
         private PreparedStatement? _incrementPlayedGamesStatement;
         private PreparedStatement? _incrementWinsLikeCrewmateStatement;
         private PreparedStatement? _incrementWinsLikeImpostorStatement;
@@ -36,7 +36,7 @@ namespace DatabaseLayer.Repositories
             _getUserByIdStatement = _session.Prepare("SELECT user_id, username, email " +
                 "FROM users WHERE user_id = ?");
 
-            _getUserStats = _session.Prepare("SELECT user_id, games_played, wins_as_crewmate, wins_as_impostor, total_score " +
+            _getUserStatsStatement = _session.Prepare("SELECT user_id, games_played, wins_as_crewmate, wins_as_impostor, total_score " +
                 "FROM user_stats WHERE user_id = ?");
 
             _createUserStatement = _session.Prepare("INSERT INTO users (user_id, username, email) " +
@@ -51,13 +51,10 @@ namespace DatabaseLayer.Repositories
 
             _addPointsStatement = _session.Prepare("UPDATE user_stats SET total_score = total_score + ? WHERE user_id = ?");
 
-            //_updateUserStatement = _session.Prepare("UPDATE users SET username = ?" +
-            //    ", email = ?, " +
-            //    "games_played = ?, " +
-            //    "wins_as_crewmate = ?, " +
-            //    "wins_as_impostor = ?, " +
-            //    "total_score = ? " +
-            //    "WHERE user_id = ?");
+            _insertUserNameStatement = _session.Prepare("INSERT INTO user_by_username (username, user_id) VALUES (?, ?)");
+
+            _usernameAlreadyExistStatement = _session.Prepare("SELECT username FROM user_by_username WHERE username = ?");
+
         }
 
        
@@ -79,19 +76,27 @@ namespace DatabaseLayer.Repositories
 
         public Task CreateAsync(CreateUserInput user)
         {
-            var boundStatement = _createUserStatement!.Bind(
+            var batch = new BatchStatement();
+            var userStatement = _createUserStatement!.Bind(
                 user.UserId,
                 user.Username,
                 user.Email);
 
-            return _session.ExecuteAsync(boundStatement);
+            var userByUsername = _insertUserNameStatement!.Bind(
+                user.Username,
+                user.UserId);
+
+            batch.Add(userStatement);
+            batch.Add(userByUsername);
+
+            return _session.ExecuteAsync(batch);
         }
 
         public GetUserResponse? GetUserById(string userId)
         {
             var boundStatement = _getUserByIdStatement!.Bind(userId);
             var userRow = _session.Execute(boundStatement);
-            var statsRow = _session.Execute(_getUserStats!.Bind(userId));
+            var statsRow = _session.Execute(_getUserStatsStatement!.Bind(userId));
             return MapRowsToUser(userRow.FirstOrDefault(), statsRow.FirstOrDefault());
         }
 
@@ -132,6 +137,13 @@ namespace DatabaseLayer.Repositories
         {
             var boundStatement = _addPointsStatement!.Bind(points, userId);
             return _session.ExecuteAsync(boundStatement);
+        }
+
+        public Task<bool> UsernameAlreadyExist(string username)
+        {
+            var boundStatement = _usernameAlreadyExistStatement!.Bind(username);
+            var result = _session.Execute(boundStatement);
+            return Task.FromResult(result.Any());
         }
     }
 }
