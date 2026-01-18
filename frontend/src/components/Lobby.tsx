@@ -3,7 +3,7 @@ import { HubConnectionBuilder, HubConnection } from '@microsoft/signalr';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Users, Crown, Copy, Check, LogOut, Play } from 'lucide-react'; // Instaliraj lucide-react ako nemaš
 import { useAuth } from '../context/AuthContext';
-import { useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 
 
 
@@ -20,6 +20,8 @@ const Lobby = () => {
     const { roomId } = useParams();
     const user = useAuth().user;
     const username = user?.username;
+    const navigate = useNavigate();
+
     // Funkcija za kopiranje ID-a
     const copyToClipboard = () => {
         navigator.clipboard.writeText(roomId || "");
@@ -32,21 +34,51 @@ const Lobby = () => {
             .withUrl("https://localhost:7277/gamehub")
             .withAutomaticReconnect()
             .build();
-
         setConnection(newConnection);
+        return () => {
+            console.log("Čišćenje konekcije...");
+        }
     }, []);
+
+    // Poziva handleLeaveAny na bilo koji način napuštanja lobija
+    useEffect(() => {
+        const cleanup = () => {
+            if(!isRefresh())
+            handleLeaveAny();
+        };
+        window.addEventListener('beforeunload', cleanup);
+        return () => {
+            window.removeEventListener('beforeunload', cleanup);
+            cleanup();
+        };
+    }, [connection, user]);
+
+    const isRefresh = () => {
+        if (performance.getEntriesByType) { 
+            const navEntries = performance.getEntriesByType('navigation');
+            if (navEntries.length > 0 && navEntries[0].name === 'reload') {
+                return true;
+            }
+        }
+        // fallback for older browsers
+        // @ts-ignore
+        if (performance.navigation && performance.navigation.type === 1) {
+            return true;
+        }
+        return false;
+    };
 
     useEffect(() => {
         if (connection) {
             connection.start()
                 .then(() => {
-                    connection.invoke("JoinRoom", roomId, username);
+                    connection.invoke("JoinRoom", roomId, username, user?.id);
                     connection.on("PlayerListUpdated", (updatedPlayers: Player[]) => {
                         setPlayers(updatedPlayers);
                     });
                     connection.on("Error", (message: string) => {
                         alert(message);
-                        window.location.reload();
+                        navigate('/home');
                     });
                 })
                 .catch(e => console.error('SignalR Greška: ', e));
@@ -56,10 +88,17 @@ const Lobby = () => {
     // Proveravamo da li je trenutni korisnik Host
     const isCurrentUserHost = players.find(p => p.username === username)?.isHost;
 
-    const handleNapusti = () => {
-        // Logika za napuštanje sobe
+    const handleNapusti = async () => {
+        navigate('/home')
     };
 
+    const handleLeaveAny = async () => {
+        try {
+            await connection?.invoke("LeaveRoom", user?.id);
+        } catch (e) {
+            // možeš logovati grešku ako želiš
+        }
+    };
     return (
         <div className="min-h-screen bg-[#0a0a0c] text-white font-sans p-4 md:p-8 relative overflow-hidden">
             {/* Ambientalne animacije u pozadini */}

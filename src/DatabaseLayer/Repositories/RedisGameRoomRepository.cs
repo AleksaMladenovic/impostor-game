@@ -31,4 +31,48 @@ public class RedisGameRoomRepository : IGameRoomRepository
     {
         await _redisDb.KeyDeleteAsync($"room:{roomId}");
     }
+    
+    public async Task SaveRoomForUserId(string userId, string roomId)
+    {
+        // Čuva mapiranje userId -> roomId sa TTL od 24h 
+        // (u slučaju da se klijent diskonektor bez upozorenja)
+        await _redisDb.StringSetAsync($"conn:{userId}", roomId, TimeSpan.FromHours(24));
+    }
+    
+    public async Task<string?> GetRoomFromUserId(string userId)
+    {
+        var roomId = await _redisDb.StringGetAsync($"conn:{userId}");
+        return roomId.IsNull ? null : roomId.ToString();
+    }
+    
+    public async Task RemoveRoomForUserId(string userId)
+    {
+        await _redisDb.KeyDeleteAsync($"conn:{userId}");
+    }
+
+    public async Task SaveUserIdForConnection(string connectionId, string userId)
+    {
+        await _redisDb.StringSetAsync($"connuser:{connectionId}", userId); 
+    }
+
+    public async Task<string?> GetUserIdForConnection(string connectionId)
+    {
+        var userId = await _redisDb.StringGetAsync($"connuser:{connectionId}");
+        return userId.IsNull ? null : userId.ToString();
+    }
+
+    public async Task RemoveUserIdForConnection(string connectionId)
+    {
+        await _redisDb.KeyDeleteAsync($"connuser:{connectionId}");
+    }
+
+    public async Task DeleteAsync(string roomId, int minutes)
+    {
+        await _redisDb.KeyExpireAsync($"room:{roomId}", TimeSpan.FromMinutes(minutes));
+    }
+
+    public async Task RemoveTimerForRoom(string roomId)
+    {
+        await _redisDb.KeyPersistAsync($"room:{roomId}");
+    }
 }

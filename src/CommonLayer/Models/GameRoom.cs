@@ -6,8 +6,8 @@ public class GameRoom
 {
     public string RoomId { get; set; }
 
-    // Rečnik igrača je idealan za brz pristup preko ConnectionId.
-    // Key: ConnectionId, Value: Player object
+    // Rečnik igrača je idealan za brz pristup preko UserId.
+    // Key: UserId, Value: Player object
     public Dictionary<string, Player> Players { get; set; } = new();
 
     public GameState State { get; set; } = GameState.Lobby;
