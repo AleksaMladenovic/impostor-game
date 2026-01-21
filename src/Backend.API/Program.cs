@@ -72,6 +72,13 @@ builder.Services.AddSingleton<Cassandra.ISession>(sp =>
             user_id text
         ); 
     ");
+    session.Execute(@"
+    CREATE TABLE IF NOT EXISTS secret_words (
+        word_id text PRIMARY KEY,
+        word text
+        );"
+);
+
     session.ChangeKeyspace("impostor_game");
     return session;
 });
@@ -82,6 +89,7 @@ builder.Services.AddSingleton<Cassandra.ISession>(sp =>
 builder.Services.AddScoped<IGameRoomRepository, RedisGameRoomRepository>();
 builder.Services.AddScoped<ILobbyService, LobbyService>();
 builder.Services.AddScoped<IUserService, CassandraUserRepository>();
+builder.Services.AddScoped<ISecretWordRepository, CassandraSecretWordRepository>();
 // Kad budeš imao repozitorijume za Cassandru, registrovaćeš ih ovde.
 
 // NOVO: DODAVANJE SIGNALR-A
