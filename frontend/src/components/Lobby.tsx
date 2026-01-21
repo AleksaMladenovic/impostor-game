@@ -3,6 +3,7 @@ import { HubConnectionBuilder, HubConnection } from '@microsoft/signalr';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Users, Crown, Copy, Check, LogOut, Play } from 'lucide-react'; // Instaliraj lucide-react ako nemaš
 import { useAuth } from '../context/AuthContext';
+import { useSignalR } from '../context/SignalRContext';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 
 interface Player {
@@ -32,7 +33,7 @@ export interface SendRoom {
 
 
 const Lobby = () => {
-    const [connection, setConnection] = useState<HubConnection | null>(null);
+    const { connection, isConnected } = useSignalR();
     const [players, setPlayers] = useState<Player[]>([]);
     const [copied, setCopied] = useState(false);
     const { roomId } = useParams();
@@ -48,16 +49,7 @@ const Lobby = () => {
         setTimeout(() => setCopied(false), 2000);
     };
 
-    useEffect(() => {
-        const newConnection = new HubConnectionBuilder()
-            .withUrl("https://localhost:7277/gamehub")
-            .withAutomaticReconnect()
-            .build();
-        setConnection(newConnection);
-        return () => {
-            // console.log("Čišćenje konekcije...");
-        }
-    }, []);
+    // Konekcija se sada kreira u SignalRContext provideru, samo je koristimo ovde
 
     // Poziva handleLeaveAny na bilo koji način napuštanja lobija
     // useEffect(() => {
@@ -105,21 +97,19 @@ const Lobby = () => {
 
     useEffect(() => {
         if (connection) {
-            connection.start()
-                .then(() => {
-                    connection.invoke("JoinRoom", roomId, username, user?.id);
-                    connection.on("PlayerListUpdated", (updatedPlayers: Player[]) => {
-                        setPlayers(updatedPlayers);
-                    });
-                    connection.on("GameStarted", (roomDetails: SendRoom) => {
-                        navigate(`/game/${roomDetails.roomId}`, { state: { roomDetails } });
-                    });
-                    connection.on("Error", (message: string) => {
-                        alert(message);
-                        navigate('/home');
-                    });
-                })
-                .catch(e => console.error('SignalR Greška: ', e));
+            // Konekcija je već pokrenuta u SignalRContext, samo je koristimo
+            connection.invoke("JoinRoom", roomId, username, user?.id);
+            
+            connection.on("PlayerListUpdated", (updatedPlayers: Player[]) => {
+                setPlayers(updatedPlayers);
+            });
+            connection.on("GameStarted", (roomDetails: SendRoom) => {
+                navigate(`/game/${roomDetails.roomId}`, { state: { roomDetails } });
+            });
+            connection.on("Error", (message: string) => {
+                alert(message);
+                navigate('/home');
+            });
         }
     }, [connection, roomId, username]);
 

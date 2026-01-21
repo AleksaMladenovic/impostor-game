@@ -2,16 +2,26 @@ import React, { useState, useEffect } from 'react';
 import { useLocation, useParams } from 'react-router-dom';
 import { SendRoom } from './Lobby';
 import { useAuth } from '../context/AuthContext';
+import { useSignalR } from '../context/SignalRContext';
 import { motion, AnimatePresence } from 'framer-motion';
 import { MessageSquare, Send, User as UserIcon, Clock, Edit3, History, ShieldAlert } from 'lucide-react';
+
+export interface IMessage {
+    userId: string;
+    username: string;
+    content: string;
+    timestamp: string; // ISO string
+}
+
 
 const Game: React.FC = () => {
     const location = useLocation();
     const { roomId } = useParams();
     const { user } = useAuth();
+    const { connection, isConnected } = useSignalR();
     const [showIntro, setShowIntro] = useState(true);
     const [message, setMessage] = useState("");
-    const [clueInput, setClueInput] = useState("");
+    const [chatMessages, setChatMessages] = useState<IMessage[]>([]);    const [clueInput, setClueInput] = useState("");
     const [timeLeft, setTimeLeft] = useState(0);
     const { roomDetails } = location.state as { roomDetails: SendRoom };
     const isImpostor = user?.username === roomDetails.usernameOfImpostor;
@@ -40,6 +50,55 @@ const Game: React.FC = () => {
         return () => clearTimeout(timer);
     }, []);
 
+    useEffect(() => {
+        // Povezivanje na SignalR za chat 
+        if (connection) {
+            console.log("Connection state:", connection.state);
+            
+            // Prvo uklonimo stari listener da izbegnemo duplikate
+            connection.off("ReceiveMessage");
+            
+            connection.on("ReceiveMessage", (msg: IMessage) => {
+                console.log("Primljena poruka:", msg.content);
+                setChatMessages(prevMessages => [...prevMessages, msg]);
+            });
+        } else {
+            console.warn("Nema dostupne konekcije u Game komponenti");
+        }
+        
+        // Cleanup - uklonimo listener kada se komponenta unmount-uje
+        return () => {
+            if (connection) {
+                connection.off("ReceiveMessage");
+            }
+        };
+    }, [connection])
+
+    const handleSendMessage = () => {
+        if (message.trim() === "") return;
+        if (!connection) {
+            console.error("Konekcija nije uspostavljena");
+            alert("Greška: Niste povezani na server");
+            return;
+        }
+        console.log("Šaljem poruku:", message, "u sobu:", roomId);
+        const msg: IMessage = {
+            userId: user?.id || '',
+            username: user?.username || 'Nepoznati Igrač',
+            content: message,
+            timestamp: new Date().toISOString()
+        }
+        connection
+            .invoke("SendMessageToRoom", roomId, msg)
+            .then(() => {
+                console.log("Poruka je uspešno poslana");
+                setMessage("");
+            })
+            .catch((err) => {
+                console.error("Greška pri slanju poruke:", err);
+                alert("Greška pri slanju poruke: " + err.message);
+            });
+    };
     return (
         <div className="min-h-screen bg-[#060608] text-white font-sans overflow-hidden">
             <AnimatePresence>
@@ -119,6 +178,14 @@ const Game: React.FC = () => {
                                     00:{timeLeft < 10 ? `0${timeLeft}` : timeLeft}
                                 </span>
                             </div>
+                        </div>
+
+                        {/* Connection Status Indicator */}
+                        <div className="absolute top-4 left-4 z-30 flex items-center gap-2 px-4 py-2 rounded-2xl bg-black/60 border border-white/10 backdrop-blur-xl">
+                            <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`} />
+                            <span className="text-[10px] font-bold uppercase tracking-widest text-gray-400">
+                                {isConnected ? 'Povezan' : 'Prekid konekcije'}
+                            </span>
                         </div>
 
                          <aside className="w-80 bg-white/[0.01] border-r border-white/10 backdrop-blur-3xl flex flex-col">
@@ -211,6 +278,17 @@ const Game: React.FC = () => {
                                     <p className="text-sm text-gray-300 italic font-medium">Dobrodošli u sektor {roomId}. Pazite na sumnjivo ponašanje.</p>
                                 </div>
                                 {/* Ovde ćeš mapirati prave poruke iz SignalR-a */}
+                                {chatMessages.map((msg, index) => (
+                                    <div 
+                                        key={index}
+                                        className={`p-4 rounded-2xl border ${msg.username === user?.username ? 'bg-blue-500/10 border-blue-500/20 self-end rounded-br-none' : 'bg-white/5 border-white/10 rounded-bl-none'}`}
+                                    >
+                                        <p className={`text-[10px] font-black mb-1 ${msg.username === user?.username ? 'text-blue-400' : 'text-gray-400'}`}>
+                                            {msg.username.toUpperCase()}
+                                        </p>
+                                        <p className="text-sm text-gray-300">{msg.content}</p>
+                                    </div>
+                                ))}
                             </div>
 
                             {/* Input polje za chat */}
@@ -226,7 +304,7 @@ const Game: React.FC = () => {
                                         value={message}
                                         onChange={(e) => setMessage(e.target.value)}
                                     />
-                                    <button className="bg-white text-black p-4 rounded-xl hover:bg-gray-200 active:scale-90 transition-all shadow-lg">
+                                    <button className="bg-white text-black p-4 rounded-xl hover:bg-gray-200 active:scale-90 transition-all shadow-lg" onClick={handleSendMessage}>
                                         <Send size={18} />
                                     </button>
                                 </form>

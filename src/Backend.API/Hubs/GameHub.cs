@@ -1,6 +1,8 @@
 namespace MyApp.Api.Hubs;
 
+using System.Net.Mail;
 using Microsoft.AspNetCore.SignalR;
+using MyApp.CommonLayer.DTOs;
 using MyApp.CommonLayer.Enums;
 using MyApp.CommonLayer.Interfaces;
 using MyApp.CommonLayer.Models;
@@ -86,6 +88,27 @@ public class GameHub : Hub
         if (room != null)
         {
             await Clients.Group(roomId).SendAsync("GameStarted", sendRoom);
+        }
+    }
+
+    public async Task SendMessageToRoom(string roomId, SendMessageDto message)
+    {
+        try
+        {
+            var messageModel = new Message
+            {
+                UserId = message.UserId,
+                Username = message.Username,
+                Content = message.Content,
+                Timestamp = DateTime.UtcNow
+            };
+            await _lobbyService.SendMessageToRoomAsync(roomId, messageModel);
+            await Clients.Group(roomId).SendAsync("ReceiveMessage", message);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error sending message to room: {ex.Message}");
+            throw;
         }
     }
 }

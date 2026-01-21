@@ -8,5 +8,7 @@ public interface ILobbyService
     Task<GameRoom?> JoinRoomAsync(string roomId, string username, string userId, string connectionId);
     Task<GameRoom?> LeaveRoomAsync(string userId, string connectionId);
     Task<GameRoom?> RemovePlayerFromRoomAsync(string roomId, string userId, string connectionId);
+    Task SendMessageToRoomAsync(string roomId, Message message);
+    Task<List<Message>> GetMessagesFromRoomAsync(string roomId);
     // Dodaj ostale metode koje će ti trebati
 }

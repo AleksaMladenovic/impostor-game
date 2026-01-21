@@ -12,20 +12,23 @@ public class LobbyService : ILobbyService
     private readonly IGameRoomRepository _gameRoomRepository;
     private readonly ISecretWordService _secretWordService;
 
+    private readonly IChatRepository _chatRepository;
+
     // Zavisimo od interfejsa, ne od konkretne Redis implementacije!
-    public LobbyService(IGameRoomRepository gameRoomRepository, ISecretWordService secretWordService)
+    public LobbyService(IGameRoomRepository gameRoomRepository, ISecretWordService secretWordService, IChatRepository chatRepository)
     {
         _gameRoomRepository = gameRoomRepository;
         _secretWordService = secretWordService;
+        _chatRepository = chatRepository;
     }
 
     public async Task<GameRoom> CreateRoomAsync()
     {
         var roomId = Guid.NewGuid().ToString("N").Substring(0, 6).ToUpper();
         var room = new GameRoom(roomId);
-        
+
         await _gameRoomRepository.SaveAsync(room);
-        
+
         return room;
     }
 
@@ -48,14 +51,14 @@ public class LobbyService : ILobbyService
         var playerIds = room.Players.Keys.ToList();
 
         room.CurrentTurnPlayerId = playerIds[Random.Shared.Next(playerIds.Count)];
-        
+
         room.UserIdOfImpostor = playerIds[Random.Shared.Next(playerIds.Count)];
 
         room.SubmittedClues.Clear();
         room.Votes.Clear();
 
         await _gameRoomRepository.SaveAsync(room);
-        
+
     }
 
     public async Task<GameRoom?> JoinRoomAsync(string roomId, string username, string userId, string connectionId)
@@ -110,5 +113,32 @@ public class LobbyService : ILobbyService
             }
         }
         return room;
+    }
+
+    public async Task SendMessageToRoomAsync(string roomId, Message message)
+    {
+        try
+        {
+            await _chatRepository.AddMessageToRoomAsync(roomId, message);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error sending message to room: {ex.Message}");
+            throw;
+        }
+
+    }
+
+    public async Task<List<Message>> GetMessagesFromRoomAsync(string roomId)
+    {
+        try
+        {
+            return await _chatRepository.GetMessagesFromRoomAsync(roomId);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error getting messages from room: {ex.Message}");
+            throw;
+        }
     }
 }
