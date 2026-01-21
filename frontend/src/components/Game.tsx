@@ -117,7 +117,7 @@ const Game: React.FC = () => {
                             animate={{ letterSpacing: "0.2em", opacity: 1, scale: 1 }}
                             transition={{ duration: 1.5, ease: "easeOut" }}
                         >
-                            <h1 className={`text-6xl md:text-8xl font-black italic uppercase italic tracking-tighter mb-4 ${
+                            <h1 className={`text-6xl md:text-8xl font-black italic uppercase tracking-tighter mb-4 ${
                                 isImpostor ? 'text-red-600 shadow-[0_0_50px_rgba(220,38,38,0.5)]' : 'text-blue-500 shadow-[0_0_50px_rgba(59,130,246,0.5)]'
                             }`}>
                                 {isImpostor ? 'IMPOSTOR' : 'CREWMATE'}
@@ -248,7 +248,7 @@ const Game: React.FC = () => {
                                     
                                     <div className="space-y-2">
                                         <p className="text-gray-400 text-sm uppercase font-bold tracking-widest">Tajna reč sistema:</p>
-                                        <h2 className="text-7xl md:text-9xl font-black italic tracking-tighter uppercase italic bg-gradient-to-b from-white to-gray-500 bg-clip-text text-transparent">
+                                        <h2 className="text-7xl md:text-9xl font-black italic tracking-tighter uppercase bg-gradient-to-b from-white to-gray-500 bg-clip-text text-transparent">
                                             {isImpostor ? '???' : roomDetails.secretWord}
                                         </h2>
                                     </div>
@@ -278,17 +278,6 @@ const Game: React.FC = () => {
                                     <p className="text-sm text-gray-300 italic font-medium">Dobrodošli u sektor {roomId}. Pazite na sumnjivo ponašanje.</p>
                                 </div>
                                 {/* Ovde ćeš mapirati prave poruke iz SignalR-a */}
-                                {chatMessages.map((msg, index) => (
-                                    <div 
-                                        key={index}
-                                        className={`p-4 rounded-2xl border ${msg.username === user?.username ? 'bg-blue-500/10 border-blue-500/20 self-end rounded-br-none' : 'bg-white/5 border-white/10 rounded-bl-none'}`}
-                                    >
-                                        <p className={`text-[10px] font-black mb-1 ${msg.username === user?.username ? 'text-blue-400' : 'text-gray-400'}`}>
-                                            {msg.username.toUpperCase()}
-                                        </p>
-                                        <p className="text-sm text-gray-300">{msg.content}</p>
-                                    </div>
-                                ))}
                                 {chatMessages.map((msg, index) => (
                                     <div 
                                         key={index}
