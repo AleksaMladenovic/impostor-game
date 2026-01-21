@@ -27,7 +27,7 @@ public class GameHub : Hub
 
         await _gameRoomRepository.RemoveTimerForRoom(roomId);
         var connectionId = Context.ConnectionId;
-        var player = new Player(connectionId, userId, username);
+        var player = new Player(connectionId, userId, username, room.Players.Count == 0);
 
         // Slučaj 2: Igrač je već u sobi (npr. refresh stranice)
         if (room.Players.ContainsKey(userId))
@@ -94,12 +94,22 @@ public class GameHub : Hub
         // Ukloni igrača iz liste
         if (room.Players.ContainsKey(userId))
         {
+            if(room.Players[userId].IsHost && room.Players.Count > 1)
+            {
+                // Ako je host napustio sobu, dodeli novog hosta (prvom u listi)
+                var newHost = room.Players.Values.First(p => p.UserId != userId);
+                newHost.IsHost = true;
+            }
             room.Players.Remove(userId);
             // Ukloni mapiranje iz Redis-a
             await _gameRoomRepository.RemoveRoomForUserId(userId);
             await _gameRoomRepository.RemoveUserIdForConnection(connectionId);
             
             await Groups.RemoveFromGroupAsync(connectionId, roomId);
+            
+            // Sačuvaj ažurirano stanje sobe u Redis    
+            await _gameRoomRepository.SaveAsync(room);
+
             // Ako soba nema igrače, možeš je obrisati ili je ostaviti
             if (room.Players.Count == 0)
             {
@@ -107,9 +117,6 @@ public class GameHub : Hub
             }
             else
             {
-                // Sačuvaj ažurirano stanje sobe u Redis
-                await _gameRoomRepository.SaveAsync(room);
-
                 // Obavesti sve preostale igrače da je neko izašao
                 await Clients.Group(roomId).SendAsync("PlayerListUpdated", room.Players.Values.ToList());
             }

@@ -43,8 +43,8 @@ const Lobby = () => {
     // Poziva handleLeaveAny na bilo koji način napuštanja lobija
     useEffect(() => {
         const cleanup = () => {
-            if(!isRefresh())
-            handleLeaveAny();
+            // if (!isRefresh())
+                handleLeaveAny();
         };
         window.addEventListener('beforeunload', cleanup);
         return () => {
@@ -53,20 +53,19 @@ const Lobby = () => {
         };
     }, [connection, user]);
 
-    const isRefresh = () => {
-        if (performance.getEntriesByType) { 
-            const navEntries = performance.getEntriesByType('navigation');
-            if (navEntries.length > 0 && navEntries[0].name === 'reload') {
-                return true;
-            }
-        }
-        // fallback for older browsers
-        // @ts-ignore
-        if (performance.navigation && performance.navigation.type === 1) {
-            return true;
-        }
-        return false;
-    };
+    // const isRefresh = () => {
+    //     if (window.performance && 'getEntriesByType' in window.performance) {
+    //         const navEntries = window.performance.getEntriesByType('navigation') as PerformanceNavigationTiming[];
+    //         if (navEntries.length > 0 && (navEntries[0] as PerformanceNavigationTiming).type === 'reload') {
+    //             return true;
+    //         }
+    //     }
+    //     // @ts-ignore
+    //     if (window.performance && window.performance.navigation && window.performance.navigation.type === 1) {
+    //         return true;
+    //     }
+    //     return false;
+    // };
 
     useEffect(() => {
         if (connection) {
@@ -87,13 +86,14 @@ const Lobby = () => {
 
     // Proveravamo da li je trenutni korisnik Host
     const isCurrentUserHost = players.find(p => p.username === username)?.isHost;
-
     const handleNapusti = async () => {
+
         navigate('/home')
     };
 
     const handleLeaveAny = async () => {
         try {
+            console.log("Napuštanje sobe...");
             await connection?.invoke("LeaveRoom", user?.id);
         } catch (e) {
             // možeš logovati grešku ako želiš
