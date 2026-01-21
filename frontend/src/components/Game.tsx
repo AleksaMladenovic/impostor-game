@@ -289,6 +289,17 @@ const Game: React.FC = () => {
                                         <p className="text-sm text-gray-300">{msg.content}</p>
                                     </div>
                                 ))}
+                                {chatMessages.map((msg, index) => (
+                                    <div 
+                                        key={index}
+                                        className={`p-4 rounded-2xl border ${msg.username === user?.username ? 'bg-blue-500/10 border-blue-500/20 self-end rounded-br-none' : 'bg-white/5 border-white/10 rounded-bl-none'}`}
+                                    >
+                                        <p className={`text-[10px] font-black mb-1 ${msg.username === user?.username ? 'text-blue-400' : 'text-gray-400'}`}>
+                                            {msg.username.toUpperCase()}
+                                        </p>
+                                        <p className="text-sm text-gray-300">{msg.content}</p>
+                                    </div>
+                                ))}
                             </div>
 
                             {/* Input polje za chat */}
