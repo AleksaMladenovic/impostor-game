@@ -5,13 +5,31 @@ import { Users, Crown, Copy, Check, LogOut, Play } from 'lucide-react'; // Insta
 import { useAuth } from '../context/AuthContext';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 
-
-
 interface Player {
     connectionId: string;
     username: string;
     isHost: boolean;
 }
+
+export enum GameState {
+    Lobby = 0,
+    InProgress = 1,
+    Voting = 2,
+    RoundFinished = 3,
+    GameFinished = 4
+}
+
+export interface SendRoom {
+    roomId: string;
+    currentRound?: number;
+    currentTurnPlayerUsername?: string | null;
+    secretWord?: string | null;
+    usernameOfImpostor?: string | null;
+    state?: GameState;
+    numberOfRounds?: number;
+    secondsPerTurn?: number;
+}
+
 
 const Lobby = () => {
     const [connection, setConnection] = useState<HubConnection | null>(null);
@@ -42,17 +60,17 @@ const Lobby = () => {
     }, []);
 
     // Poziva handleLeaveAny na bilo koji način napuštanja lobija
-    useEffect(() => {
-        const cleanup = () => {
-            // if (!isRefresh())
-            handleLeaveAny();
-        };
-        window.addEventListener('beforeunload', cleanup);
-        return () => {
-            window.removeEventListener('beforeunload', cleanup);
-            cleanup();
-        };
-    }, [connection, user]);
+    // useEffect(() => {
+    //     const cleanup = () => {
+    //         // if (!isRefresh())
+    //         handleLeaveAny();
+    //     };
+    //     window.addEventListener('beforeunload', cleanup);
+    //     return () => {
+    //         window.removeEventListener('beforeunload', cleanup);
+    //         cleanup();
+    //     };
+    // }, [connection, user]);
 
     // useEffect(() => {
     //     handleLeaveAny();
@@ -93,6 +111,9 @@ const Lobby = () => {
                     connection.on("PlayerListUpdated", (updatedPlayers: Player[]) => {
                         setPlayers(updatedPlayers);
                     });
+                    connection.on("GameStarted", (roomDetails: SendRoom) => {
+                        navigate(`/game/${roomDetails.roomId}`, { state: { roomDetails } });
+                    });
                     connection.on("Error", (message: string) => {
                         alert(message);
                         navigate('/home');
@@ -104,8 +125,12 @@ const Lobby = () => {
 
     // Proveravamo da li je trenutni korisnik Host
     const isCurrentUserHost = players.find(p => p.username === username)?.isHost;
-    const handleNapusti = async () => {
 
+    // Podesavanja za timer i broj rundi
+    const [timer, setTimer] = useState(30); // sekunde, default 30
+    const [rounds, setRounds] = useState(2); // default 2
+
+    const handleNapusti = async () => {
         navigate('/home')
     };
 
@@ -117,6 +142,16 @@ const Lobby = () => {
             // možeš logovati grešku ako želiš
         }
     };
+
+    const handlePokreniIgru = async () => {
+        try {
+            console.log("Pokretanje igre...");
+            await connection?.invoke("StartGame", roomId, rounds, timer);
+        } catch (e) {
+            console.error("Greška pri pokretanju igre: ", e);
+        }
+    };
+
     return (
         <div className="min-h-screen bg-[#0a0a0c] text-white font-sans p-4 md:p-8 relative overflow-hidden">
             {/* Ambientalne animacije u pozadini */}
@@ -229,17 +264,50 @@ const Lobby = () => {
                     <div className="space-y-6">
                         <div className="bg-gradient-to-b from-white/[0.07] to-transparent border border-white/10 p-8 rounded-[2rem] text-center">
                             <h3 className="text-xl font-black italic mb-2 uppercase tracking-tighter">Status Partije</h3>
-                            <p className="text-gray-500 text-sm mb-8">Čekamo da Host pokrene igru...</p>
+                            {!isCurrentUserHost && (
+                                <p className="text-gray-500 text-sm mb-8">Čekamo da Host pokrene igru...</p>)}
 
                             {isCurrentUserHost ? (
-                                
-                                <motion.button
-                                    whileHover={{ scale: 1.03 }}
-                                    whileTap={{ scale: 0.97 }}
-                                    className="w-full py-5 bg-white text-black font-black rounded-2xl flex items-center justify-center gap-3 shadow-[0_0_30px_rgba(255,255,255,0.15)] hover:bg-gray-200 transition-all uppercase tracking-widest"
-                                >
-                                    <Play fill="black" size={20} /> Pokreni Igru
-                                </motion.button>
+                                <div className="space-y-4">
+                                    <div className="flex flex-col md:flex-row gap-4 justify-center items-center">
+                                        <div className="flex flex-col items-start">
+                                            <label htmlFor="timer" className="text-xs font-bold uppercase text-gray-400 mb-1">Vreme po rundi (sekunde)</label>
+                                            <input
+                                                id="timer"
+                                                type="number"
+                                                min={10}
+                                                max={120}
+                                                step={1}
+                                                value={timer}
+                                                onChange={e => setTimer(Math.max(10, Math.min(120, Number(e.target.value))))}
+                                                className="w-32 px-3 py-2 rounded-lg border border-gray-300 text-black font-bold text-center bg-white"
+                                            />
+                                            <span className="text-[10px] text-white-500 mt-1">(10s - 120s)</span>
+                                        </div>
+                                        <div className="flex flex-col items-start">
+                                            <label htmlFor="rounds" className="text-xs font-bold uppercase text-gray-400 mb-1">Broj rundi</label>
+                                            <input
+                                                id="rounds"
+                                                type="number"
+                                                min={1}
+                                                max={5}
+                                                step={1}
+                                                value={rounds}
+                                                onChange={e => setRounds(Math.max(1, Math.min(5, Number(e.target.value))))}
+                                                className="w-32 px-3 py-2 rounded-lg border border-gray-300 text-black font-bold text-center bg-white"
+                                            />
+                                            <span className="text-[10px] text-white-500 mt-1">(1 - 5)</span>
+                                        </div>
+                                    </div>
+                                    <motion.button
+                                        whileHover={{ scale: 1.03 }}
+                                        whileTap={{ scale: 0.97 }}
+                                        onClick={handlePokreniIgru}
+                                        className="w-full py-5 bg-white text-black font-black rounded-2xl flex items-center justify-center gap-3 shadow-[0_0_30px_rgba(255,255,255,0.15)] hover:bg-gray-200 transition-all uppercase tracking-widest"
+                                    >
+                                        <Play fill="black" size={20} /> Pokreni Igru
+                                    </motion.button>
+                                </div>
                             ) : (
                                 <div className="py-5 border-2 border-dashed border-white/10 rounded-2xl text-gray-600 font-bold uppercase text-xs tracking-[0.2em]">
                                     Samo Host može da krene

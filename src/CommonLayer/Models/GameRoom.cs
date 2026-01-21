@@ -23,15 +23,18 @@ public class GameRoom
     // Tajna reč za "crew" članove
     public string? SecretWord { get; set; }
 
-    // Ko je trenutno na potezu (čuvamo ConnectionId)
+    // Ko je trenutno na potezu (čuvamo UserId)
     public string? CurrentTurnPlayerId { get; set; }
+
+    // Ko je "impostor" u ovoj rundi (čuvamo UserId)
+    public string? UserIdOfImpostor { get; set; }
     
     // Ovde možemo čuvati asocijacije za trenutnu rundu
-    // Key: Player ConnectionId, Value: Clue
+    // Key: Player UserId, Value: Clue
     public Dictionary<string, string> SubmittedClues { get; set; } = new();
 
     // Ovde možemo čuvati glasove za trenutnu rundu
-    // Key: Voter's ConnectionId, Value: Voted Player's ConnectionId
+    // Key: Voter's UserId, Value: Voted Player's UserId
     public Dictionary<string, string> Votes { get; set; } = new();
 
     public GameRoom(string roomId)

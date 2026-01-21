@@ -7,6 +7,7 @@ import ProtectedRoute from "./components/ProtectedRoute";
 import { AuthProvider } from "./context/AuthContext";
 import VerifyEmail from "./components/VerifyEmail";
 import Lobby from "./components/Lobby";
+import Game from "./components/Game";
 
 function App() {
   return (
@@ -28,6 +29,11 @@ function App() {
           <Route path="/lobby/:roomId" element={
             <ProtectedRoute>
               <Lobby />
+            </ProtectedRoute>
+          } />
+          <Route path="/game/:roomId" element={
+            <ProtectedRoute>
+              <Game />
             </ProtectedRoute>
           } />
         </Routes>
