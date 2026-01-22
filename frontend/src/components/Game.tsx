@@ -34,7 +34,14 @@ const Game: React.FC = () => {
     const [clues, setCluesWords] = useState<IClue[]>([]);
     const [chatMessages, setChatMessages] = useState<IMessage[]>([]);
     const [timeLeft, setTimeLeft] = useState(initialRoomDetails.secondsPerTurn || 30);
+    // Spisak ljudi koji su već "udarili" glas (da bismo prikazali kvačice)
+    const [votedPlayers, setVotedPlayers] = useState<string[]>([]);
+    // Da li je lokalni korisnik već kliknuo
     const [hasVoted, setHasVoted] = useState(false);
+    // Za prikaz rezultata izbacivanja (npr. 5 sekundi)
+    const [showEjectionScreen, setShowEjectionScreen] = useState(false);
+
+
 
     // --- DINAMIČKE VARIJABLE ---
     // Koristimo currentRoom jer se on menja kroz SignalR
@@ -56,38 +63,63 @@ const Game: React.FC = () => {
         return () => clearInterval(interval);
     }, [timeLeft, showIntro]);
 
-    // 3. SIGNALR LISTENERS (Sve spojeno u jedan useEffect)
+   // 3. SIGNALR LISTENERS (Sređen cleanup da spreči dupliranje)
     useEffect(() => {
         if (!connection) return;
 
-        // Listener za Chat
+        // Prvo obrišemo sve stare listenere da budemo 100% sigurni
+        connection.off("ReceiveMessage");
+        connection.off("ReceiveClue");
+        connection.off("UserVoted");
+        connection.off("RoomUpdated");
+
         connection.on("ReceiveMessage", (msg: IMessage) => {
             setChatMessages(prev => [...prev, msg]);
         });
 
-        // Listener za Tragove
         connection.on("ReceiveClue", (newClue: IClue) => {
+            console.log("Primljen trag:", newClue.clueWord);
             setCluesWords(prev => [...prev, newClue]);
         });
 
-        connection.on("RoomUpdated", (updatedRoom: SendRoom) => {
-            console.log("Soba ažurirana! Sledeći na potezu:", updatedRoom.currentTurnPlayerUsername);
-            setCurrentRoom(updatedRoom);
-            setTimeLeft(updatedRoom.secondsPerTurn || 30); 
+        connection.on("UserVoted", (username: string) => {
+            setVotedPlayers(prev => [...prev, username]);
         });
 
+        connection.on("RoomUpdated", (updatedRoom: SendRoom) => {
+            // Koristimo funkciju unutar setState da proverimo PRETHODNO stanje bez zavisnosti u nizu
+            setCurrentRoom(prevRoom => {
+                // Detekcija prelaska iz Voting (2) u InProgress/Finished
+                if (prevRoom.state === 2 && updatedRoom.state !== 2) {
+                    setHasVoted(false);
+                    setVotedPlayers([]);
+                    
+                    if (updatedRoom.lastEjectedUsername) {
+                        setShowEjectionScreen(true);
+                        setTimeout(() => setShowEjectionScreen(false), 5000);
+                    }
+                }
+                return updatedRoom;
+            });
+            setTimeLeft(updatedRoom.secondsPerTurn || 30);
+        });
+
+        // CLEANUP: Gasi apsolutno sve listenere
         return () => {
             connection.off("ReceiveMessage");
             connection.off("ReceiveClue");
+            connection.off("UserVoted");
             connection.off("RoomUpdated");
         };
-    }, [connection]);
+    }, [connection]); // Uklonjen currentRoom.state iz zavisnosti da se ne bi restartovalo stalno
 
+    // Dodatni mali effect za čišćenje glasanja
     useEffect(() => {
-    if (!isVotingPhase) {
-        setHasVoted(false);
-    }
+        if (!isVotingPhase) {
+            setHasVoted(false);
+        }
     }, [isVotingPhase]);
+
 
 
 
@@ -123,14 +155,18 @@ const Game: React.FC = () => {
             .then(() => setClue("")) // Čistimo polje nakon slanja
             .catch(err => console.error("Greška pri slanju traga:", err));
     };
-    const handleVote = (targetUserId: string | null) => {
+    const handleVote = (targetId: string | null, targetUsername: string | null) => {
     if (hasVoted || !connection) return;
 
-    connection.invoke("VoteForPlayer", roomId, user?.id, targetUserId)
-        .then(() => {
-            setHasVoted(true);
-            console.log(targetUserId ? `Glasao za: ${targetUserId}` : "Preskočio glasanje");
-        })
+    const voteDto = {
+        userId: user?.id,
+        username: user?.username,
+        targetId: targetId || "skip",
+        targetUsername: targetUsername || "Preskočeno"
+    };
+
+    connection.invoke("VoteForPlayer", roomId, voteDto)
+        .then(() => setHasVoted(true))
         .catch(err => console.error("Greška pri glasanju:", err));
     };
 
@@ -239,86 +275,79 @@ const Game: React.FC = () => {
                             </div>
                         </aside>
 
-                            {/* --- VOTING MODAL OVERLAY --- */}
-                    <AnimatePresence>
-                        {isVotingPhase && (
-                            <motion.div
-                                initial={{ opacity: 0 }}
-                                animate={{ opacity: 1 }}
-                                exit={{ opacity: 0 }}
-                                className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-md flex items-center justify-center p-4"
-                            >
-                                <motion.div
-                                    initial={{ scale: 0.9, y: 20 }}
-                                    animate={{ scale: 1, y: 0 }}
-                                    className="bg-white/[0.03] border border-white/10 p-10 rounded-[3rem] max-w-4xl w-full shadow-2xl relative overflow-hidden"
-                                >
-                                    {/* Dekorativna pozadina modala */}
-                                    <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-red-600 to-transparent animate-pulse" />
+                          {/* --- 1. MODAL ZA GLASANJE --- */}
+                            <AnimatePresence>
+                                {isVotingPhase && (
+                                    <motion.div 
+                                        initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                                        className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-md flex items-center justify-center p-4"
+                                    >
+                                        <div className="bg-white/[0.03] border border-white/10 p-10 rounded-[3rem] max-w-4xl w-full shadow-2xl relative overflow-hidden">
+                                            <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-red-600 to-transparent" />
+                                            
+                                            <div className="text-center mb-10">
+                                                <h2 className="text-4xl font-black italic uppercase tracking-tighter text-white">GLASANJE</h2>
+                                                <p className="text-gray-500 text-xs font-bold tracking-[0.3em] mt-2">IDENTIFIKUJTE IMPOSTORA</p>
+                                            </div>
 
-                                    <div className="text-center mb-12">
-                                        <h2 className="text-5xl font-black italic tracking-tighter uppercase text-white mb-2">
-                                            GLASANJE <span className="text-red-600">U TOKU</span>
-                                        </h2>
-                                        <p className="text-gray-500 uppercase tracking-[0.3em] font-bold text-xs">
-                                            {hasVoted ? "Sačekaj da ostali završe..." : "Ko je Impostor?"}
-                                        </p>
-                                    </div>
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-10">
+                                                {Object.values(currentRoom.players)
+                                                    .filter(p => p.userId !== user?.id) // Svi osim TEBE
+                                                    .map((player) => (
+                                                        <button
+                                                            key={player.userId}
+                                                            disabled={hasVoted}
+                                                            onClick={() => handleVote(player.userId, player.username)}
+                                                            className={`flex items-center justify-between p-5 rounded-2xl border transition-all ${
+                                                                hasVoted ? 'opacity-50 cursor-default border-white/5' : 'bg-white/5 border-white/10 hover:border-red-500/50 hover:bg-white/[0.08]'
+                                                            }`}
+                                                        >
+                                                            <div className="flex items-center gap-4">
+                                                                <div className="w-10 h-10 rounded-xl bg-gray-800 flex items-center justify-center font-bold">{player.username[0]}</div>
+                                                                <span className="font-black uppercase tracking-tight">{player.username}</span>
+                                                            </div>
+                                                            {/* Prikaz kvačice ako je igrač glasao */}
+                                                            {votedPlayers.includes(player.username) && (
+                                                                <div className="bg-green-500/20 text-green-500 text-[10px] px-2 py-1 rounded-md font-bold">SPREMAN</div>
+                                                            )}
+                                                        </button>
+                                                    ))}
+                                            </div>
 
-                            {/* LISTA IGRAČA ZA GLASANJE */}
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-12">
-                                {Object.values(currentRoom.players)
-                                    .filter(p => p.userId !== user?.id) // Svi osim TEBE
-                                    .map((player) => (
-                                        <motion.button
-                                            key={player.userId}
-                                            whileHover={!hasVoted ? { scale: 1.02, backgroundColor: "rgba(255,255,255,0.08)" } : {}}
-                                            whileTap={!hasVoted ? { scale: 0.98 } : {}}
-                                            onClick={() => handleVote(player.userId)}
-                                            disabled={hasVoted}
-                                            className={`flex items-center gap-4 p-5 rounded-2xl border transition-all text-left ${
-                                                hasVoted 
-                                                ? 'opacity-50 border-white/5 cursor-not-allowed' 
-                                                : 'border-white/10 bg-white/5 hover:border-red-600/50'
-                                            }`}
+                                            <button 
+                                                disabled={hasVoted}
+                                                onClick={() => handleVote(null, null)}
+                                                className="px-8 py-4 bg-white/5 border border-white/10 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-white/10 transition-all"
+                                            >
+                                                {hasVoted ? "Glasano" : "Skip Vote"}
+                                            </button>
+                                        </div>
+                                    </motion.div>
+                                )}
+                            </AnimatePresence>
+
+                            {/* --- 2. CINEMATIC EJECTION EKRAN --- */}
+                            <AnimatePresence>
+                                {showEjectionScreen && (
+                                    <motion.div 
+                                        initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }}
+                                        className="fixed inset-0 z-[110] bg-black flex flex-col items-center justify-center text-center p-10"
+                                    >
+                                        <motion.div
+                                            animate={{ y: [0, -10, 0] }} transition={{ duration: 4, repeat: Infinity }}
                                         >
-                                            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-gray-700 to-gray-900 flex items-center justify-center font-black text-xl border border-white/10">
-                                                {player.username[0].toUpperCase()}
-                                            </div>
-                                            <div>
-                                                <p className="font-black uppercase tracking-tight text-white">{player.username}</p>
-                                                <p className="text-[10px] text-gray-500 uppercase font-bold tracking-widest">Osumnjičeni</p>
-                                            </div>
-                                        </motion.button>
-                                    ))}
-                            </div>
-
-                            {/* SKIP DUGME - DONJI LEVI UGAO */}
-                            <div className="flex justify-start">
-                                <motion.button
-                                    whileHover={!hasVoted ? { backgroundColor: "rgba(255,255,255,0.1)" } : {}}
-                                    whileTap={!hasVoted ? { scale: 0.95 } : {}}
-                                    onClick={() => handleVote(null)}
-                                    disabled={hasVoted}
-                                    className={`flex items-center gap-2 px-8 py-4 rounded-xl border border-white/10 font-black uppercase text-xs tracking-widest transition-all ${
-                                        hasVoted ? 'opacity-30' : 'text-gray-400 hover:text-white'
-                                    }`}
-                                >
-                                    {hasVoted ? "Glasano" : "Skip Vote"}
-                                </motion.button>
-                            </div>
-
-                                    {/* Tajmer za kraj glasanja (Opciono ako imaš na beku) */}
-                                    <div className="absolute top-10 right-10 flex items-center gap-2 text-red-600">
-                                        <Clock size={20} className="animate-pulse" />
-                                        <span className="font-mono font-black text-xl">
-                                            {timeLeft < 10 ? `0${timeLeft}` : timeLeft}
-                                        </span>
-                                    </div>
-                                </motion.div>
-                            </motion.div>
-                        )}
-                    </AnimatePresence>
+                                            <h2 className="text-5xl md:text-8xl font-black italic uppercase tracking-tighter text-white mb-6">
+                                                {currentRoom.lastEjectedUsername === "Nerešeno" 
+                                                    ? "NIKO NIJE IZBAČEN" 
+                                                    : `${currentRoom.lastEjectedUsername?.toUpperCase()} JE IZBAČEN`}
+                                            </h2>
+                                            <p className="text-xl text-red-600 font-black tracking-[0.5em] uppercase">
+                                                {currentRoom.isGameOver? "IMPOSTOR JE PRONAĐEN" : "POTRAGA SE NASTAVLJA..."}
+                                            </p>
+                                        </motion.div>
+                                    </motion.div>
+                                )}
+                            </AnimatePresence>
 
 
 

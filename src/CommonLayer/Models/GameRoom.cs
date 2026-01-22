@@ -27,10 +27,15 @@ public class GameRoom
     public string? CurrentTurnPlayerId { get; set; }
 
     public string? CurrentTurnPlayerUsername {  get; set; }
+    public int TurnsTakenInCurrentRound { get; set; } = 0;
 
     // Ko je "impostor" u ovoj rundi (čuvamo UserId)
     public string? UserIdOfImpostor { get; set; }
-    
+    public string? UsernameOfImpostor { get; set; }
+
+    public string? LastEjectedUserId { get; set; }
+    public string? LastEjectedUsername { get; set; }
+    public bool IsGameOver { get; set; } = false; // Da znamo da li je Impostor izbačen
     // Ovde možemo čuvati asocijacije za trenutnu rundu
     // Key: Player UserId, Value: Clue
     public Dictionary<string, string> SubmittedClues { get; set; } = new();

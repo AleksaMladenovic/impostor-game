@@ -144,4 +144,35 @@ public class GameHub : Hub
             throw;
         }
     }
+
+
+    public async Task VoteForPlayer(string roomId, VoteDto voteDto)
+    {
+        try
+        {
+            var voteModel = new Vote
+            {
+                UserId = voteDto.UserId,
+                Username = voteDto.Username,
+                TargetId = voteDto.TargetId ?? "skip",
+                TargetUsername = voteDto.TargetUsername ?? "Preskočeno"
+            };
+
+            await _lobbyService.RegisterVoteAsync(roomId, voteModel);
+
+            await Clients.Group(roomId).SendAsync("UserVoted", voteDto.Username);
+
+            var updatedRoom = await _lobbyService.GetRoomAsync(roomId);
+
+            if (updatedRoom != null)
+            {
+                await Clients.Group(roomId).SendAsync("RoomUpdated", updatedRoom);
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"HUB VOTE ERROR: {ex.Message}");
+            throw;
+        }
+    }
 }

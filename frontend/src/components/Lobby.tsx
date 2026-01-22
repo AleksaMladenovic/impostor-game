@@ -8,6 +8,7 @@ import { useLocation, useNavigate, useParams } from 'react-router-dom';
 
 interface Player {
     connectionId: string;
+    userId: string;
     username: string;
     isHost: boolean;
 }
@@ -30,6 +31,9 @@ export interface SendRoom {
     state?: GameState;
     numberOfRounds?: number;
     secondsPerTurn?: number;
+    lastEjectedUsername?: string | null;
+    players:Record<string, Player>;
+    isGameOver?: boolean;
 }
 
 

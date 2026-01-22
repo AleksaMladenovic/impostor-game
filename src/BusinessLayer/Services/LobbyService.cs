@@ -14,16 +14,18 @@ public class LobbyService : ILobbyService
     private readonly ISecretWordService _secretWordService;
     private readonly IUserService _userService;
     private readonly IChatRepository _chatRepository;
+    private readonly IVoteRepository _voteRepository;
 
     private readonly IClueRepository _clueRepository;
     // Zavisimo od interfejsa, ne od konkretne Redis implementacije!
-    public LobbyService(IGameRoomRepository gameRoomRepository, ISecretWordService secretWordService, IChatRepository chatRepository,IClueRepository clueRepository,IUserService user)
+    public LobbyService(IGameRoomRepository gameRoomRepository, ISecretWordService secretWordService, IChatRepository chatRepository,IClueRepository clueRepository,IUserService user,IVoteRepository voteRepository)
     {
         _gameRoomRepository = gameRoomRepository;
         _secretWordService = secretWordService;
         _chatRepository = chatRepository;
         _clueRepository = clueRepository;
         _userService = user;
+        _voteRepository = voteRepository;
     }
 
     public async Task<GameRoom> CreateRoomAsync()
@@ -35,7 +37,10 @@ public class LobbyService : ILobbyService
 
         return room;
     }
-
+    public async Task<GameRoom>?GetRoomAsync(string roomId)
+    {
+        return await _gameRoomRepository.GetByIdAsync(roomId);
+    }
     public async Task StartGameAsync(string roomId, int maxNumberOfRounds, int durationPerUserInSeconds)
     {
         var room = await _gameRoomRepository.GetByIdAsync(roomId);
@@ -48,7 +53,7 @@ public class LobbyService : ILobbyService
         room.SecondsPerTurn = durationPerUserInSeconds;
         room.State = GameState.InProgress;
         room.CurrentRound = 1;
-
+        room.TurnsTakenInCurrentRound = 0;
         room.SecretWord = await _secretWordService.GetRandomSecretWordAsync();
 
         // Izaberi nasumičnog igrača za prvi potez
@@ -58,6 +63,7 @@ public class LobbyService : ILobbyService
         room.CurrentTurnPlayerUsername = _userService.GetUserById(room.CurrentTurnPlayerId).Username;
 
         room.UserIdOfImpostor = playerIds[Random.Shared.Next(playerIds.Count)];
+        room.UsernameOfImpostor= _userService.GetUserById(room.UserIdOfImpostor).Username;
 
         room.SubmittedClues.Clear();
         room.Votes.Clear();
@@ -177,27 +183,85 @@ public class LobbyService : ILobbyService
     public async Task<GameRoom?> AdvanceTurnAsync(string roomId)
     {
         var room = await _gameRoomRepository.GetByIdAsync(roomId);
-
         if (room == null || room.Players == null || room.Players.Count == 0)
             return null;
 
         var sortedPlayers = room.Players.Values.OrderBy(p => p.UserId).ToList();
-
-        int currentIndex = sortedPlayers.FindIndex(p => p.Username == room.CurrentTurnPlayerUsername);
-
+        int currentIndex = sortedPlayers.FindIndex(p => p.UserId == room.CurrentTurnPlayerId);
         if (currentIndex == -1) currentIndex = 0;
 
-        int nextIndex = (currentIndex + 1) % sortedPlayers.Count;
+        room.TurnsTakenInCurrentRound++;
 
-        room.CurrentTurnPlayerUsername = sortedPlayers[nextIndex].Username;
-
-        if (nextIndex == 0)
+        if (room.TurnsTakenInCurrentRound >= sortedPlayers.Count)
         {
-            room.CurrentRound++;
+            room.State = GameState.Voting; 
+            room.TurnsTakenInCurrentRound = 0; 
+
+        }
+        else
+        {
+            int nextIndex = (currentIndex + 1) % sortedPlayers.Count;
+            var nextPlayer = sortedPlayers[nextIndex];
+
+            room.CurrentTurnPlayerId = nextPlayer.UserId;
+            room.CurrentTurnPlayerUsername = nextPlayer.Username;
         }
 
         await _gameRoomRepository.SaveAsync(room);
-
         return room;
     }
+
+    public async Task RegisterVoteAsync(string roomId, Vote vote)
+    {
+        await _voteRepository.AddVoteAsync(roomId, vote);
+
+        var room = await _gameRoomRepository.GetByIdAsync(roomId);
+        var allVotes = await _voteRepository.GetVotesAsync(roomId);
+
+        if (room != null && allVotes.Count >= room.Players.Count)
+        {
+            var voteCounts = allVotes
+                .GroupBy(v => v.TargetId)
+                .Select(g => new { Id = g.Key, Count = g.Count() })
+                .OrderByDescending(x => x.Count)
+                .ToList();
+
+            if (voteCounts.Count > 0 && voteCounts[0].Id != "skip")
+            {
+                bool isTie = voteCounts.Count > 1 && voteCounts[0].Count == voteCounts[1].Count;
+
+                if (!isTie)
+                {
+                    var winner = voteCounts[0];
+                    room.LastEjectedUserId = winner.Id;
+                    room.LastEjectedUsername = allVotes.First(v => v.TargetId == winner.Id).TargetUsername;
+
+                    if (room.LastEjectedUserId == room.UserIdOfImpostor)
+                    {
+                        room.IsGameOver = true;
+                        room.State = GameState.GameFinished; 
+                    }
+                }
+                else
+                {
+                    room.LastEjectedUsername = "Nerešeno"; 
+                }
+            }
+            else
+            {
+                room.LastEjectedUsername = "Preskočeno"; 
+            }
+
+            
+            if (!room.IsGameOver)
+            {
+                room.State = GameState.InProgress;
+                room.CurrentRound++;
+            }
+
+            await _voteRepository.ClearVotesAsync(roomId);
+            await _gameRoomRepository.SaveAsync(room);
+        }
+    }
+
 }
