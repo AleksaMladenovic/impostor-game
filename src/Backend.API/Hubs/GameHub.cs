@@ -10,14 +10,12 @@ namespace MyApp.Api.Hubs;
 public class GameHub : Hub
 {
     private readonly IGameRoomRepository _gameRoomRepository;
-    private readonly ILobbyService _lobbyService;
     private readonly IGameService _gameService;
 
     // Hub može direktno da koristi repozitorijum jer upravlja "živim" stanjem
-    public GameHub(IGameRoomRepository gameRoomRepository, ILobbyService lobbyService, IGameService gameService)
+    public GameHub(IGameRoomRepository gameRoomRepository, IGameService gameService)
     {
         _gameRoomRepository = gameRoomRepository;
-        _lobbyService = lobbyService;
         _gameService = gameService;
     }
 

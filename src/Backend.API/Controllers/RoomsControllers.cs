@@ -19,7 +19,7 @@ public class RoomsController : ControllerBase
     public async Task<IActionResult> CreateRoom()
     {
         var room = await _lobbyService.CreateRoomAsync();
-        var response = new CreateRoomResponse { RoomId = room.RoomId };
+        var response = new CreateRoomResponse { RoomId = room };
         return Ok(response);
     }
 }

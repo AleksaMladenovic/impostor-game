@@ -38,7 +38,7 @@ export interface SendRoom {
 
 const Lobby = () => {
     const [connection, setConnection] = useState<HubConnection | null>(null);
-    const [players, setPlayers] = useState<Player[]>([]);
+    const [players, setPlayers] = useState<string[]>([]);
     const [copied, setCopied] = useState(false);
     const [started, setStarted] = useState(false);
     const { roomId } = useParams();
@@ -60,33 +60,47 @@ const Lobby = () => {
             .withAutomaticReconnect()
             .build();
 
+        const handleBeforeUnload = async () => {
+            try {
+                console.log("Napuštanje sobe (beforeunload)...");
+                await newConnection?.invoke("LeaveRoomWithDelay", username, roomId, 2);
+            } catch (e) {
+                // možeš logovati grešku ako želiš
+            }
+        };
+
         newConnection.start()
             .then(() => {
                 console.log("Povezan na LobbyHub");
                 setConnection(newConnection);
-                newConnection.invoke("JoinRoom", roomId, username, user?.id);
+                newConnection.invoke("JoinRoom", roomId, username);
             })
             .catch(err => console.error("Greška pri povezivanju: ", err));
 
-        // window.addEventListener('popstate', handleLeaveAny);
+        window.addEventListener('beforeunload', handleBeforeUnload);
 
-        // return () => {
-        //     if (!started) {
-        //         handleLeaveAny();
-        //     }
-        //     window.removeEventListener('popstate', handleLeaveAny);
-        //     newConnection.stop();
-        // };
+        return () => {
+            console.log("Komponenta se unmountuje (back button ili navigate)...");
+            window.removeEventListener('beforeunload', handleBeforeUnload);
+            // Cleanup async logic inside a synchronous function
+            (async () => {
+                try {
+                    await newConnection?.invoke("LeaveRoomWithDelay", username, roomId, 2);
+                } catch (e) {
+                    // grešku možeš logovati
+                }
+                newConnection.stop();
+            })();
+        }
     }, [roomId, username]);
 
     useEffect(() => {
         if (connection) {
-            connection.on("PlayerListUpdated", (updatedPlayers: Player[]) => {
+            connection.on("PlayerListUpdated", (updatedPlayers: string[]) => {
                 setPlayers(updatedPlayers);
             });
-            connection.on("GameStarted", (roomDetails: SendRoom) => {
-                window.removeEventListener('popstate', handleLeaveAny);
-                setStarted(true);
+            connection.on("GameStarted", async (roomDetails: SendRoom) => {
+                await handleInstaLeave();
                 navigate(`/game/${roomDetails.roomId}`, { state: { roomDetails } });
             });
             connection.on("Error", (message: string) => {
@@ -102,22 +116,22 @@ const Lobby = () => {
         }
     }, [connection]);
 
-    // Proveravamo da li je trenutni korisnik Host
-    const isCurrentUserHost = players.find(p => p.username === username)?.isHost;
+    // Proveravamo da li je trenutni korisnik Host (prvi u nizu je host)
+    const isCurrentUserHost = players[0] === username;
 
     // Podesavanja za timer i broj rundi
     const [timer, setTimer] = useState(30); // sekunde, default 30
     const [rounds, setRounds] = useState(2); // default 2
 
     const handleNapusti = async () => {
-        await handleLeaveAny();
+        await handleInstaLeave();
         navigate('/home')
     };
 
-    const handleLeaveAny = async () => {
+    const handleInstaLeave = async () => {
         try {
-            console.log("Napuštanje sobe...");
-            await connection?.invoke("LeaveRoom", user?.id);
+            console.log("Napuštanje sobe (instant)...");
+            await connection?.invoke("LeaveRoom", username);
         } catch (e) {
             // možeš logovati grešku ako želiš
         }
@@ -204,17 +218,17 @@ const Lobby = () => {
                             <AnimatePresence>
                                 {players.map((player) => (
                                     <motion.div
-                                        key={player.connectionId}
+                                        key={player}
                                         initial={{ opacity: 0, scale: 0.9, y: 20 }}
                                         animate={{ opacity: 1, scale: 1, y: 0 }}
                                         exit={{ opacity: 0, scale: 0.8 }}
-                                        className={`relative group overflow-hidden bg-white/5 border ${player.username === username ? 'border-blue-500/40' : 'border-white/10'} p-5 rounded-[1.5rem] backdrop-blur-md flex items-center gap-4 transition-all hover:bg-white/[0.08]`}
+                                        className={`relative group overflow-hidden bg-white/5 border ${player === username ? 'border-blue-500/40' : 'border-white/10'} p-5 rounded-[1.5rem] backdrop-blur-md flex items-center gap-4 transition-all hover:bg-white/[0.08]`}
                                     >
                                         <div className="relative">
                                             <div className="w-12 h-12 bg-gradient-to-br from-gray-700 to-gray-900 rounded-xl flex items-center justify-center font-bold text-xl border border-white/10">
-                                                {player.username[0].toUpperCase()}
+                                                {player[0].toUpperCase()}
                                             </div>
-                                            {player.isHost && (
+                                            {player === players[0] && (
                                                 <div className="absolute -top-2 -right-2 bg-yellow-500 p-1 rounded-full shadow-lg">
                                                     <Crown size={20} className="text-black" />
                                                 </div>
@@ -223,13 +237,13 @@ const Lobby = () => {
 
                                         <div className="flex-1">
                                             <p className="font-bold text-lg leading-none mb-1">
-                                                {player.username}
-                                                {player.username === username && <span className="ml-2 text-[10px] text-blue-400 uppercase tracking-tighter">(Ti)</span>}
+                                                {player}
+                                                {player === username && <span className="ml-2 text-[10px] text-blue-400 uppercase tracking-tighter">(Ti)</span>}
                                             </p>
                                             <p className="text-[10px] text-gray-500 uppercase tracking-widest">Spreman za igru</p>
                                         </div>
 
-                                        {player.isHost && (
+                                        {player === players[0] && (
                                             <span className="text-[10px] bg-yellow-500/10 text-yellow-500 border border-yellow-500/20 px-2 py-1 rounded-md font-bold uppercase tracking-tighter">
                                                 Host
                                             </span>

@@ -96,6 +96,7 @@ builder.Services.AddScoped<IChatRepository, RedisChatRepository>();
 builder.Services.AddScoped<IClueRepository, RedisClueRepository>();
 builder.Services.AddScoped<IVoteRepository,RedisVoteRepository>();
 builder.Services.AddScoped<IGameService, GameService>();
+builder.Services.AddScoped<ILobbyRepository, RedisLobbyRepository>();
 // Kad budeš imao repozitorijume za Cassandru, registrovaćeš ih ovde.
 
 // NOVO: DODAVANJE SIGNALR-A

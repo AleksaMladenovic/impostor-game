@@ -11,88 +11,68 @@ namespace MyApp.BusinessLayer.Services;
 public class LobbyService : ILobbyService
 {
     private readonly IGameRoomRepository _gameRoomRepository;
-    private readonly ISecretWordService _secretWordService;
-    private readonly IUserService _userService;
-    private readonly IChatRepository _chatRepository;
-    private readonly IVoteRepository _voteRepository;
-
-    private readonly IClueRepository _clueRepository;
+    private readonly ILobbyRepository _lobbyRepository;
     // Zavisimo od interfejsa, ne od konkretne Redis implementacije!
-    public LobbyService(IGameRoomRepository gameRoomRepository, ISecretWordService secretWordService, IChatRepository chatRepository,IClueRepository clueRepository,IUserService user,IVoteRepository voteRepository)
+    public LobbyService(IGameRoomRepository gameRoomRepository,  ILobbyRepository lobbyRepository)
     {
         _gameRoomRepository = gameRoomRepository;
-        _secretWordService = secretWordService;
-        _chatRepository = chatRepository;
-        _clueRepository = clueRepository;
-        _userService = user;
-        _voteRepository = voteRepository;
+        _lobbyRepository = lobbyRepository;
     }
 
-    public async Task<GameRoom> CreateRoomAsync()
+    public async Task<string> CreateRoomAsync()
     {
         var roomId = Guid.NewGuid().ToString("N").Substring(0, 6).ToUpper();
-        var room = new GameRoom(roomId);
 
-        await _gameRoomRepository.SaveAsync(room);
-
-        return room;
+        await _lobbyRepository.SaveAsync(roomId);
+        return  roomId;
     }
     
     
 
-    public async Task<GameRoom?> JoinRoomAsync(string roomId, string username, string userId, string connectionId)
+    public async Task JoinRoomAsync(string roomId, string username, string connectionId)
     {
-        var room = await _gameRoomRepository.GetByIdAsync(roomId);
-        if (room == null)
-            return null;
-
-        await _gameRoomRepository.RemoveTimerForRoom(roomId);
-        var player = new Player(connectionId, userId, username, room.Players.Count == 0);
-
-        if (room.Players.ContainsKey(userId))
+        if(await _lobbyRepository.DoesLobbyExistAsync(roomId) == false)
         {
-            await _gameRoomRepository.SaveUserIdForConnection(userId, connectionId);
-            return room;
+            throw new Exception($"Soba sa ID-em '{roomId}' ne postoji.");
         }
 
-        room.Players.Add(userId, player);
-        await _gameRoomRepository.SaveRoomForUserId(userId, roomId);
-        await _gameRoomRepository.SaveUserIdForConnection(userId, connectionId);
-        await _gameRoomRepository.SaveAsync(room);
-        return room;
-    }
-
-    public async Task<GameRoom?> LeaveRoomAsync(string userId, string connectionId)
-    {
-        var roomId = await _gameRoomRepository.GetRoomFromUserId(userId);
-        if (string.IsNullOrEmpty(roomId))
-            return null;
-        return await RemovePlayerFromRoomAsync(roomId, userId, connectionId);
-    }
-
-    public async Task<GameRoom?> RemovePlayerFromRoomAsync(string roomId, string userId, string connectionId)
-    {
-        var room = await _gameRoomRepository.GetByIdAsync(roomId);
-        if (room == null)
-            return null;
-        if (room.Players.ContainsKey(userId))
+        if(await _lobbyRepository.RoomContainsPlayerAsync(roomId, username))
         {
-            if (room.Players[userId].IsHost && room.Players.Count > 1)
-            {
-                var newHost = room.Players.Values.First(p => p.UserId != userId);
-                newHost.IsHost = true;
-            }
-            room.Players.Remove(userId);
-            await _gameRoomRepository.RemoveRoomForUserId(userId);
-            await _gameRoomRepository.RemoveUserIdForConnection(connectionId);
-            await _gameRoomRepository.SaveAsync(room);
-            if (room.Players.Count == 0)
-            {
-                await _gameRoomRepository.DeleteAsync(roomId, 30);
-            }
+            await _lobbyRepository.RecconectPlayerAsync(roomId, connectionId, username);
         }
-        return room;
+        else
+        {
+            await _lobbyRepository.AddPlayerToRoomAsync(roomId, username, connectionId);
+        }
     }
 
+    public async Task<string?> LeaveRoomAsync(string username)
+    {
+        return await _lobbyRepository.RemovePlayerFromRoomAsync(username);
+    }
 
+    public async Task<bool> RemovePlayerFromRoomAsync(string roomId, string username)
+    {
+        return await _lobbyRepository.RemovePlayerFromRoomAsync(roomId, username);
+    }
+
+    public async Task<List<string>> GetUsernamesForLobby(string roomId)
+    {
+        return await _lobbyRepository.GetUsernames(roomId);
+    }
+
+    public async Task<string> GetHostOfRoomAsync(string roomId)
+    {
+        return await _lobbyRepository.HostOfRoomAsync(roomId);
+    }
+
+    public async Task RecconectPlayerAsync(string roomId, string connectionId, string username)
+    {
+        await _lobbyRepository.RecconectPlayerAsync(roomId, connectionId, username);
+    }
+
+    public async Task<bool> RoomContainsPlayerAsync(string roomId, string username)
+    {
+        return await _lobbyRepository.RoomContainsPlayerAsync(roomId, username);
+    }
 }

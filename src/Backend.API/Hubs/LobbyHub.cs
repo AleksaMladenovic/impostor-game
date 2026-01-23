@@ -9,69 +9,91 @@ using MyApp.CommonLayer.Interfaces;
 using MyApp.CommonLayer.Models;
 using global::CommonLayer.DTOs;
 using global::CommonLayer.Models;
+using MyApp.BusinessLayer.Services;
+using StackExchange.Redis;
 
 public class LobbyHub : Hub
 {
     private readonly IGameRoomRepository _gameRoomRepository;
     private readonly ILobbyService _lobbyService;
     private readonly IGameService _gameService;
+    private readonly IDatabase _redisDb;
 
     // Hub može direktno da koristi repozitorijum jer upravlja "živim" stanjem
-    public LobbyHub(IGameRoomRepository gameRoomRepository, ILobbyService lobbyService, IGameService gameService)
+    public LobbyHub(IGameRoomRepository gameRoomRepository, ILobbyService lobbyService, IGameService gameService, IConnectionMultiplexer redis)
     {
+        _redisDb = redis.GetDatabase();
         _gameRoomRepository = gameRoomRepository;
         _lobbyService = lobbyService;
         _gameService = gameService;
     }
 
-    public async Task JoinRoom(string roomId, string username, string userId)
+    public async Task JoinRoom(string roomId, string username)
     {
         var connectionId = Context.ConnectionId;
-        var room = await _lobbyService.JoinRoomAsync(roomId, username, userId, connectionId);
-        if (room == null)
+
+        // Otkaži pending leave ako postoji
+        var pendingLeaveKey = $"pending:leave:{username}";
+        string? pendingLeaveRoomId = await _redisDb.StringGetAsync(pendingLeaveKey);
+        if (pendingLeaveRoomId == roomId)
         {
-            await Clients.Caller.SendAsync("Error", $"Soba sa ID-em '{roomId}' ne postoji.");
+            await _redisDb.KeyDeleteAsync(pendingLeaveKey);
+            await Groups.AddToGroupAsync(connectionId, roomId);
+            await _lobbyService.RecconectPlayerAsync(roomId, connectionId, username);
+            await Clients.Client(connectionId).SendAsync("PlayerListUpdated", await _lobbyService.GetUsernamesForLobby(roomId));
+            return;
+        }
+        await LeaveRoom(username);
+
+        try
+        {
+            await _lobbyService.JoinRoomAsync(roomId, username, connectionId);
+        }
+        catch (Exception ex)
+        {
+            await Clients.Caller.SendAsync("Error", ex.Message);
             return;
         }
         await Groups.AddToGroupAsync(connectionId, roomId);
-        await Clients.Group(roomId).SendAsync("PlayerListUpdated", room.Players.Values.ToList());
+        var list = await _lobbyService.GetUsernamesForLobby(roomId);
+        await Clients.Group(roomId).SendAsync("PlayerListUpdated", list);
     }
 
     // Logika za izlazak iz sobe
     public override async Task OnDisconnectedAsync(Exception? exception)
     {
+        // var connectionId = Context.ConnectionId;
+        // await _lobbyService.LeaveRoomAsync
+    }
+
+    public async Task LeaveRoom(string username)
+    {
         var connectionId = Context.ConnectionId;
-        var userId = await _gameRoomRepository.GetUserIdForConnection(connectionId);
-        if (string.IsNullOrEmpty(userId))
+        var roomid = await _lobbyService.LeaveRoomAsync(username);
+        if (roomid != null)
         {
-            await base.OnDisconnectedAsync(exception);
-            return;
-        }
-        var roomId = await _gameRoomRepository.GetRoomFromUserId(userId);
-        if (string.IsNullOrEmpty(roomId))
-        {
-            await base.OnDisconnectedAsync(exception);
-            return;
-        }
-        var room = await _lobbyService.RemovePlayerFromRoomAsync(roomId, userId, connectionId);
-        await base.OnDisconnectedAsync(exception);
-        if (room != null)
-        {
-            if (room.Players.Count == 0)
-                return;
-            await Clients.Group(roomId).SendAsync("PlayerListUpdated", room.Players.Values.ToList());
+            await Groups.RemoveFromGroupAsync(connectionId, roomid);
+            await Clients.Group(roomid).SendAsync("PlayerListUpdated", await _lobbyService.GetUsernamesForLobby(roomid));
         }
     }
 
-    public async Task LeaveRoom(string userId)
+    public async Task LeaveRoomWithDelay(string username, string roomId, int delayInSeconds)
     {
-        var connectionId = Context.ConnectionId;
-        var room = await _lobbyService.LeaveRoomAsync(userId, connectionId);
-        if (room != null && room.Players.Count > 0)
+        if(await _lobbyService.RoomContainsPlayerAsync(roomId, username) == false)
         {
-            var roomId = room.RoomId;
-            if (!string.IsNullOrEmpty(roomId))
-                await Clients.Group(roomId).SendAsync("PlayerListUpdated", room.Players.Values.ToList());
+            return;
+        }
+        var pendingLeaveKey = $"pending:leave:{username}";
+        var connectionId = Context.ConnectionId;
+        await _redisDb.StringSetAsync(pendingLeaveKey, roomId);
+        await Task.Delay(TimeSpan.FromSeconds(delayInSeconds));
+
+        // Ako flag još postoji, znači da se nije re-join-ovao
+        if (await _redisDb.KeyDeleteAsync(pendingLeaveKey))
+        {
+            await _lobbyService.LeaveRoomAsync(username);
+            await Groups.RemoveFromGroupAsync(connectionId, roomId);
+            await Clients.Group(roomId).SendAsync("PlayerListUpdated", await _lobbyService.GetUsernamesForLobby(roomId));
         }
     }
 
