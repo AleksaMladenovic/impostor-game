@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useLocation, useParams } from 'react-router-dom';
 import { SendRoom } from './Lobby';
 import { useAuth } from '../context/AuthContext';
-import { useSignalR } from '../context/SignalRContext';
+import { HubConnectionBuilder, HubConnection } from '@microsoft/signalr';
 import { motion, AnimatePresence } from 'framer-motion';
 import { MessageSquare, Send, User as UserIcon, Clock, Edit3, History } from 'lucide-react';
 
@@ -23,10 +23,10 @@ const Game: React.FC = () => {
     const location = useLocation();
     const { roomId } = useParams();
     const { user } = useAuth();
-    const { connection, isConnected } = useSignalR();
     
     // --- STATE ---
     const { roomDetails: initialRoomDetails } = location.state as { roomDetails: SendRoom };
+    const [connection, setConnection] = useState<HubConnection | null>(null);
     const [currentRoom, setCurrentRoom] = useState<SendRoom>(initialRoomDetails);
     const [showIntro, setShowIntro] = useState(true);
     const [message, setMessage] = useState("");
@@ -48,6 +48,26 @@ const Game: React.FC = () => {
     const isImpostor = user?.username === currentRoom.usernameOfImpostor;
     const isMyTurn = user?.username === currentRoom.currentTurnPlayerUsername;
     const isVotingPhase = currentRoom.state === 2;
+
+    // 0. Kreiranje SignalR konekcije na GameHub
+    useEffect(() => {
+        const newConnection = new HubConnectionBuilder()
+            .withUrl("https://localhost:7277/gamehub")
+            .withAutomaticReconnect()
+            .build();
+
+        newConnection.start()
+            .then(() => {
+                console.log("Povezan na GameHub");
+                setConnection(newConnection);
+            })
+            .catch(err => console.error("Greška pri povezivanju na GameHub:", err));
+
+        return () => {
+            newConnection.stop();
+        };
+    }, []);
+
     // 1. Kontrola Intro ekrana
     useEffect(() => {
         const timer = setTimeout(() => setShowIntro(false), 5000);
@@ -72,6 +92,8 @@ const Game: React.FC = () => {
         connection.off("ReceiveClue");
         connection.off("UserVoted");
         connection.off("RoomUpdated");
+
+        connection.invoke("JoinGame", roomId, user?.username, user?.id)
 
         connection.on("ReceiveMessage", (msg: IMessage) => {
             setChatMessages(prev => [...prev, msg]);
@@ -135,7 +157,7 @@ const Game: React.FC = () => {
             content: message,
             timestamp: new Date().toISOString()
         };
-
+        console.log("Saljemo poruku:", msg);
         connection.invoke("SendMessageToRoom", roomId, msg)
             .then(() => setMessage(""))
             .catch(err => console.error("Greška pri slanju poruke:", err));

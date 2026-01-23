@@ -95,6 +95,7 @@ builder.Services.AddScoped<ISecretWordService, SecretWordService>();
 builder.Services.AddScoped<IChatRepository, RedisChatRepository>();
 builder.Services.AddScoped<IClueRepository, RedisClueRepository>();
 builder.Services.AddScoped<IVoteRepository,RedisVoteRepository>();
+builder.Services.AddScoped<IGameService, GameService>();
 // Kad budeš imao repozitorijume za Cassandru, registrovaćeš ih ovde.
 
 // NOVO: DODAVANJE SIGNALR-A
@@ -127,6 +128,7 @@ app.UseAuthorization();
 
 // Mapiranje endpoint-a
 app.MapControllers();
-app.MapHub<GameHub>("/gamehub"); // NOVO: Mapira tvoj GameHub na URL "/gamehub"
+app.MapHub<LobbyHub>("/lobbyhub"); 
+app.MapHub<GameHub>("/gamehub");
 
 app.Run();

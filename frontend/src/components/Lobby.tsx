@@ -3,7 +3,6 @@ import { HubConnectionBuilder, HubConnection } from '@microsoft/signalr';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Users, Crown, Copy, Check, LogOut, Play } from 'lucide-react'; // Instaliraj lucide-react ako nemaš
 import { useAuth } from '../context/AuthContext';
-import { useSignalR } from '../context/SignalRContext';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 
 interface Player {
@@ -38,7 +37,7 @@ export interface SendRoom {
 
 
 const Lobby = () => {
-    const { connection, isConnected } = useSignalR();
+    const [connection, setConnection] = useState<HubConnection | null>(null);
     const [players, setPlayers] = useState<Player[]>([]);
     const [copied, setCopied] = useState(false);
     const [started, setStarted] = useState(false);
@@ -56,21 +55,32 @@ const Lobby = () => {
     };
 
     useEffect(() => {
+        const newConnection = new HubConnectionBuilder()
+            .withUrl("https://localhost:7277/lobbyhub")
+            .withAutomaticReconnect()
+            .build();
 
-        window.addEventListener('popstate', handleLeaveAny);
-        return () => {
-            if(!started)
-            handleLeaveAny();
-            window.removeEventListener('popstate', handleLeaveAny);
-        };
-    }, [connection, user]);
+        newConnection.start()
+            .then(() => {
+                console.log("Povezan na LobbyHub");
+                setConnection(newConnection);
+                newConnection.invoke("JoinRoom", roomId, username, user?.id);
+            })
+            .catch(err => console.error("Greška pri povezivanju: ", err));
 
+        // window.addEventListener('popstate', handleLeaveAny);
+
+        // return () => {
+        //     if (!started) {
+        //         handleLeaveAny();
+        //     }
+        //     window.removeEventListener('popstate', handleLeaveAny);
+        //     newConnection.stop();
+        // };
+    }, [roomId, username]);
 
     useEffect(() => {
         if (connection) {
-            // Konekcija je već pokrenuta u SignalRContext, samo je koristimo
-            connection.invoke("JoinRoom", roomId, username, user?.id);
-
             connection.on("PlayerListUpdated", (updatedPlayers: Player[]) => {
                 setPlayers(updatedPlayers);
             });
@@ -83,13 +93,14 @@ const Lobby = () => {
                 alert(message);
                 navigate('/home');
             });
+
+            return () => {
+                connection.off("PlayerListUpdated");
+                connection.off("GameStarted");
+                connection.off("Error");
+            };
         }
-        return () => {
-            connection?.off("PlayerListUpdated");
-            connection?.off("GameStarted");
-            connection?.off("Error");
-        }
-    }, [connection, roomId, username]);
+    }, [connection]);
 
     // Proveravamo da li je trenutni korisnik Host
     const isCurrentUserHost = players.find(p => p.username === username)?.isHost;
