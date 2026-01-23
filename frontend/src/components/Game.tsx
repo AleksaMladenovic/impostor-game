@@ -1,10 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, use } from 'react';
 import { useLocation, useParams } from 'react-router-dom';
-import { SendRoom } from './Lobby';
 import { useAuth } from '../context/AuthContext';
 import { HubConnectionBuilder, HubConnection } from '@microsoft/signalr';
 import { motion, AnimatePresence } from 'framer-motion';
 import { MessageSquare, Send, User as UserIcon, Clock, Edit3, History } from 'lucide-react';
+import { GameState, IReturnState } from '../interfaces/IReturnState';
 
 export interface IMessage {
     userId: string;
@@ -25,15 +25,15 @@ const Game: React.FC = () => {
     const { user } = useAuth();
     
     // --- STATE ---
-    const { roomDetails: initialRoomDetails } = location.state as { roomDetails: SendRoom };
+    // const { roomDetails: initialRoomDetails } = location.state as { roomDetails: SendRoom };
     const [connection, setConnection] = useState<HubConnection | null>(null);
-    const [currentRoom, setCurrentRoom] = useState<SendRoom>(initialRoomDetails);
+    // const [currentRoom, setCurrentRoom] = useState<SendRoom>(initialRoomDetails);
     const [showIntro, setShowIntro] = useState(true);
     const [message, setMessage] = useState("");
     const [clue, setClue] = useState("");
     const [clues, setCluesWords] = useState<IClue[]>([]);
     const [chatMessages, setChatMessages] = useState<IMessage[]>([]);
-    const [timeLeft, setTimeLeft] = useState(initialRoomDetails.secondsPerTurn || 30);
+    const [timeLeft, setTimeLeft] = useState(30);
     // Spisak ljudi koji su već "udarili" glas (da bismo prikazali kvačice)
     const [votedPlayers, setVotedPlayers] = useState<string[]>([]);
     // Da li je lokalni korisnik već kliknuo
@@ -41,13 +41,21 @@ const Game: React.FC = () => {
     // Za prikaz rezultata izbacivanja (npr. 5 sekundi)
     const [showEjectionScreen, setShowEjectionScreen] = useState(false);
 
-
-
+    const [gameState, setGameState] = useState<IReturnState | null>(null);
+    const [isImpostor, setIsImpostor] = useState(false);
+    const [isMyTurn, setIsMyTurn] = useState(false);
+    const [isVotingPhase, setIsVotingPhase] = useState(false);
+    const [players, setPlayers] = useState<string[]>([]);
+    const [currentStateNumber, setCurrentStateNumber] = useState<number>(0);
+    const [currentTurnUsername, setCurrentTurnUsername] = useState<string>("");
+    const [roundNumber, setRoundNumber] = useState<number>(1);
+    const [maxRounds, setMaxRounds] = useState<number>(1);
+    const [secretWord, setSecretWord] = useState<string>("");
     // --- DINAMIČKE VARIJABLE ---
     // Koristimo currentRoom jer se on menja kroz SignalR
-    const isImpostor = user?.username === currentRoom.usernameOfImpostor;
-    const isMyTurn = user?.username === currentRoom.currentTurnPlayerUsername;
-    const isVotingPhase = currentRoom.state === 2;
+    // const isImpostor = user?.username === currentRoom.usernameOfImpostor;
+    // const isMyTurn = user?.username === currentRoom.currentTurnPlayerUsername;
+    // const isVotingPhase = currentRoom.state === 2;
 
     // 0. Kreiranje SignalR konekcije na GameHub
     useEffect(() => {
@@ -68,11 +76,20 @@ const Game: React.FC = () => {
         };
     }, []);
 
-    // 1. Kontrola Intro ekrana
+    // 1. Kontrola Intro ekrana - izvršava se samo jednom kada se konekcija uspostavi
     useEffect(() => {
-        const timer = setTimeout(() => setShowIntro(false), 5000);
+        if (!connection) return; // Čekaj da se konekcija uspostavi
+        
+        const timer = setTimeout(() => {
+            setShowIntro(false);
+            console.log("Intro završen, obaveštavanje servera...");
+            // Koristimo trenutnu vrednost currentStateNumber iz closure-a
+            connection.invoke("StateEnded", roomId, currentStateNumber)
+                .catch(err => console.error("Greška pri obaveštavanju o završetku stanja:", err));
+        }, 5000);
+        
         return () => clearTimeout(timer);
-    }, []);
+    }, [connection]); // Samo connection u dependency array - izvršava se jednom!
 
     // 2. Logika tajmera - Resetuje se kada se promeni currentRoom (novi igrač)
     useEffect(() => {
@@ -82,6 +99,34 @@ const Game: React.FC = () => {
         }, 1000);
         return () => clearInterval(interval);
     }, [timeLeft, showIntro]);
+
+    useEffect(() => {
+        console.log("Promena gameState:", gameState);
+        if (gameState?.state === GameState.ShowSecret) {
+            setShowIntro(true);
+            setIsImpostor(user?.username === gameState!.showSecretStates?.impostorName);
+            setPlayers(gameState!.showSecretStates?.players || []);
+            setIsVotingPhase(false);
+            setSecretWord(gameState!.showSecretStates?.secretWord || "");
+            setIsMyTurn(false);
+        } else if (gameState?.state === GameState.InProgress) {
+            setShowIntro(false);
+            setIsMyTurn(user?.username === gameState!.inProgressStates?.currentPlayer);
+            setCurrentTurnUsername(gameState!.inProgressStates?.currentPlayer || "");
+            setRoundNumber(gameState!.inProgressStates?.roundNumber || 1);
+            setMaxRounds(gameState!.inProgressStates?.maxRounds || 1);
+            setIsVotingPhase(false);
+        } else if (gameState?.state === GameState.Voting) {
+            setShowIntro(false);
+            setIsVotingPhase(true);
+            setIsMyTurn(false);
+        } else {
+            setShowIntro(false);
+            setIsVotingPhase(false);
+            setIsMyTurn(false);
+        }
+    }
+    ,[gameState])
 
    // 3. SIGNALR LISTENERS (Sređen cleanup da spreči dupliranje)
     useEffect(() => {
@@ -93,8 +138,13 @@ const Game: React.FC = () => {
         connection.off("UserVoted");
         connection.off("RoomUpdated");
 
-        connection.invoke("JoinGame", roomId, user?.username, user?.id)
+        connection.invoke("JoinGame", roomId)
 
+        connection.on("GameState", (IReturnState, stateNumber:number) => {
+            console.log("Stiglo stanje igre:", IReturnState, stateNumber);
+            setGameState(IReturnState);
+            setCurrentStateNumber(stateNumber);
+        });
         connection.on("ReceiveMessage", (msg: IMessage) => {
             setChatMessages(prev => [...prev, msg]);
         });
@@ -108,23 +158,23 @@ const Game: React.FC = () => {
             setVotedPlayers(prev => [...prev, username]);
         });
 
-        connection.on("RoomUpdated", (updatedRoom: SendRoom) => {
-            // Koristimo funkciju unutar setState da proverimo PRETHODNO stanje bez zavisnosti u nizu
-            setCurrentRoom(prevRoom => {
-                // Detekcija prelaska iz Voting (2) u InProgress/Finished
-                if (prevRoom.state === 2 && updatedRoom.state !== 2) {
-                    setHasVoted(false);
-                    setVotedPlayers([]);
+        // connection.on("RoomUpdated", (updatedRoom: SendRoom) => {
+        //     // Koristimo funkciju unutar setState da proverimo PRETHODNO stanje bez zavisnosti u nizu
+        //     setCurrentRoom(prevRoom => {
+        //         // Detekcija prelaska iz Voting (2) u InProgress/Finished
+        //         if (prevRoom.state === 2 && updatedRoom.state !== 2) {
+        //             setHasVoted(false);
+        //             setVotedPlayers([]);
                     
-                    if (updatedRoom.lastEjectedUsername) {
-                        setShowEjectionScreen(true);
-                        setTimeout(() => setShowEjectionScreen(false), 5000);
-                    }
-                }
-                return updatedRoom;
-            });
-            setTimeLeft(updatedRoom.secondsPerTurn || 30);
-        });
+        //             if (updatedRoom.lastEjectedUsername) {
+        //                 setShowEjectionScreen(true);
+        //                 setTimeout(() => setShowEjectionScreen(false), 5000);
+        //             }
+        //         }
+        //         return updatedRoom;
+        //     });
+        //     setTimeLeft(updatedRoom.secondsPerTurn || 30);
+        // });
 
         // CLEANUP: Gasi apsolutno sve listenere
         return () => {
@@ -136,14 +186,18 @@ const Game: React.FC = () => {
     }, [connection]); // Uklonjen currentRoom.state iz zavisnosti da se ne bi restartovalo stalno
 
     // Dodatni mali effect za čišćenje glasanja
-    useEffect(() => {
-        if (!isVotingPhase) {
-            setHasVoted(false);
-        }
-    }, [isVotingPhase]);
+    // useEffect(() => {
+    //     if (!isVotingPhase) {
+    //         setHasVoted(false);
+    //     }
+    // }, [isVotingPhase]);
 
 
-
+    const stateEndedHandler = () => {
+        if (!connection) return;
+        connection.invoke("StateEnded", roomId, currentStateNumber)
+            .catch(err => console.error("Greška pri obaveštavanju o završetku stanja:", err));
+    }
 
 
     // --- HANDLERS ---
@@ -176,14 +230,14 @@ const Game: React.FC = () => {
         connection.invoke("SendClueToRoom", roomId, clueDto)
             .then(() => setClue("")) // Čistimo polje nakon slanja
             .catch(err => console.error("Greška pri slanju traga:", err));
+        connection.invoke("StateEnded", roomId, currentStateNumber)
     };
-    const handleVote = (targetId: string | null, targetUsername: string | null) => {
+    const handleVote = (targetUsername: string | null) => {
     if (hasVoted || !connection) return;
 
     const voteDto = {
         userId: user?.id,
         username: user?.username,
-        targetId: targetId || "skip",
         targetUsername: targetUsername || "Preskočeno"
     };
 
@@ -290,7 +344,7 @@ const Game: React.FC = () => {
                                 ) : (
                                     <div className="text-center py-4">
                                         <p className="text-[10px] text-gray-600 font-bold uppercase tracking-widest">
-                                            Čekamo da <br/> <span className="text-blue-400">{currentRoom.currentTurnPlayerUsername}</span> <br/> unese trag
+                                            Čekamo da <br/> <span className="text-blue-400">{currentTurnUsername}</span> <br/> unese trag
                                         </p>
                                     </div>
                                 )}
@@ -313,23 +367,23 @@ const Game: React.FC = () => {
                                             </div>
 
                                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-10">
-                                                {Object.values(currentRoom.players)
-                                                    .filter(p => p.userId !== user?.id) // Svi osim TEBE
+                                                {Object.values(players)
+                                                    .filter(p => p !== user?.username) // Svi osim TEBE
                                                     .map((player) => (
                                                         <button
-                                                            key={player.userId}
+                                                            key={player}
                                                             disabled={hasVoted}
-                                                            onClick={() => handleVote(player.userId, player.username)}
+                                                            onClick={() => handleVote(player)}
                                                             className={`flex items-center justify-between p-5 rounded-2xl border transition-all ${
                                                                 hasVoted ? 'opacity-50 cursor-default border-white/5' : 'bg-white/5 border-white/10 hover:border-red-500/50 hover:bg-white/[0.08]'
                                                             }`}
                                                         >
                                                             <div className="flex items-center gap-4">
-                                                                <div className="w-10 h-10 rounded-xl bg-gray-800 flex items-center justify-center font-bold">{player.username[0]}</div>
-                                                                <span className="font-black uppercase tracking-tight">{player.username}</span>
+                                                                <div className="w-10 h-10 rounded-xl bg-gray-800 flex items-center justify-center font-bold">{player[0]}</div>
+                                                                <span className="font-black uppercase tracking-tight">{player}</span>
                                                             </div>
                                                             {/* Prikaz kvačice ako je igrač glasao */}
-                                                            {votedPlayers.includes(player.username) && (
+                                                            {votedPlayers.includes(player) && (
                                                                 <div className="bg-green-500/20 text-green-500 text-[10px] px-2 py-1 rounded-md font-bold">SPREMAN</div>
                                                             )}
                                                         </button>
@@ -338,7 +392,7 @@ const Game: React.FC = () => {
 
                                             <button 
                                                 disabled={hasVoted}
-                                                onClick={() => handleVote(null, null)}
+                                                onClick={() => handleVote(null)}
                                                 className="px-8 py-4 bg-white/5 border border-white/10 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-white/10 transition-all"
                                             >
                                                 {hasVoted ? "Glasano" : "Skip Vote"}
@@ -349,7 +403,7 @@ const Game: React.FC = () => {
                             </AnimatePresence>
 
                             {/* --- 2. CINEMATIC EJECTION EKRAN --- */}
-                            <AnimatePresence>
+                            {/* <AnimatePresence>
                                 {showEjectionScreen && (
                                     <motion.div 
                                         initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }}
@@ -369,7 +423,7 @@ const Game: React.FC = () => {
                                         </motion.div>
                                     </motion.div>
                                 )}
-                            </AnimatePresence>
+                            </AnimatePresence> */}
 
 
 
@@ -377,18 +431,18 @@ const Game: React.FC = () => {
                         <div className="flex-grow flex flex-col items-center justify-center p-8 z-10 relative">
                             <motion.div className="bg-white/[0.03] border border-white/10 backdrop-blur-3xl p-16 rounded-[4rem] shadow-2xl text-center">
                                 <div className="absolute -top-6 left-1/2 -translate-x-1/2 bg-white text-black px-6 py-2 rounded-full font-black text-xs uppercase tracking-widest">
-                                    Runda {currentRoom.currentRound} / {currentRoom.numberOfRounds}
+                                    Runda {roundNumber} / {maxRounds}
                                 </div>
                                 <h3 className="text-gray-500 uppercase font-black tracking-[0.4em] text-xs mb-6">Identitet: {isImpostor ? 'IMPOSTOR' : 'CREWMATE'}</h3>
                                 <div className="space-y-2">
                                     <p className="text-gray-400 text-sm uppercase font-bold tracking-widest">Tajna reč:</p>
                                     <h2 className="text-7xl md:text-9xl font-black italic tracking-tighter uppercase bg-gradient-to-b from-white to-gray-500 bg-clip-text text-transparent">
-                                        {isImpostor ? '???' : currentRoom.secretWord}
+                                        {isImpostor ? '???' : secretWord}
                                     </h2>
                                 </div>
                                 <div className="mt-12 flex items-center justify-center gap-2 text-blue-400 font-bold uppercase tracking-widest text-sm">
                                     <UserIcon size={16} />
-                                    <span>{currentRoom.currentTurnPlayerUsername} je na potezu</span>
+                                    <span>{currentTurnUsername} je na potezu</span>
                                 </div>
                             </motion.div>
                         </div>
@@ -422,8 +476,8 @@ const Game: React.FC = () => {
                                 </form>
                             </div>
                         </aside>
-                    </motion.div>
-                )}
+                    </motion.div>)
+                }
             </AnimatePresence>
         </div>
     );

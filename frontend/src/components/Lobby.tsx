@@ -12,40 +12,31 @@ interface Player {
     isHost: boolean;
 }
 
-export enum GameState {
-    Lobby = 0,
-    InProgress = 1,
-    Voting = 2,
-    RoundFinished = 3,
-    GameFinished = 4
-}
 
-export interface SendRoom {
-    roomId: string;
-    currentRound?: number;
-    currentTurnPlayerUserId?: string | null;
-    currentTurnPlayerUsername?: string | null;
-    secretWord?: string | null;
-    usernameOfImpostor?: string | null;
-    state?: GameState;
-    numberOfRounds?: number;
-    secondsPerTurn?: number;
-    lastEjectedUsername?: string | null;
-    players:Record<string, Player>;
-    isGameOver?: boolean;
-}
+// export interface SendRoom {
+//     roomId: string;
+//     currentRound?: number;
+//     currentTurnPlayerUserId?: string | null;
+//     currentTurnPlayerUsername?: string | null;
+//     secretWord?: string | null;
+//     usernameOfImpostor?: string | null;
+//     state?: GameState;
+//     numberOfRounds?: number;
+//     secondsPerTurn?: number;
+//     lastEjectedUsername?: string | null;
+//     players:Record<string, Player>;
+//     isGameOver?: boolean;
+// }
 
 
 const Lobby = () => {
     const [connection, setConnection] = useState<HubConnection | null>(null);
     const [players, setPlayers] = useState<string[]>([]);
     const [copied, setCopied] = useState(false);
-    const [started, setStarted] = useState(false);
     const { roomId } = useParams();
     const user = useAuth().user;
     const username = user?.username;
     const navigate = useNavigate();
-    const location = useLocation();
 
     // Funkcija za kopiranje ID-a
     const copyToClipboard = () => {
@@ -99,9 +90,9 @@ const Lobby = () => {
             connection.on("PlayerListUpdated", (updatedPlayers: string[]) => {
                 setPlayers(updatedPlayers);
             });
-            connection.on("GameStarted", async (roomDetails: SendRoom) => {
+            connection.on("GameStarted", async () => {
                 await handleInstaLeave();
-                navigate(`/game/${roomDetails.roomId}`, { state: { roomDetails } });
+                navigate(`/game/${roomId}`);
             });
             connection.on("Error", (message: string) => {
                 alert(message);

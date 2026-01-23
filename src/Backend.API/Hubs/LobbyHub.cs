@@ -99,22 +99,7 @@ public class LobbyHub : Hub
 
     public async Task StartGame(string roomId, int maxNumberOfRounds, int durationPerUserInSeconds)
     {
-        await _gameService.StartGameAsync(roomId, maxNumberOfRounds, durationPerUserInSeconds);
-        var room = await _gameRoomRepository.GetByIdAsync(roomId);
-        SendRoom sendRoom = new SendRoom
-        {
-            RoomId = room!.RoomId,
-            CurrentRound = room.CurrentRound,
-            CurrentTurnPlayerUsername = room.Players.ContainsKey(room.CurrentTurnPlayerId!) ? room.Players[room.CurrentTurnPlayerId!].Username : null,
-            SecretWord = room.SecretWord,
-            UsernameOfImpostor = room.Players.ContainsKey(room.UserIdOfImpostor!) ? room.Players[room.UserIdOfImpostor!].Username : null,
-            State = room.State,
-            NumberOfRounds = room.NumberOfRounds,
-            SecondsPerTurn = room.SecondsPerTurn
-        };
-        if (room != null)
-        {
-            await Clients.Group(roomId).SendAsync("GameStarted", sendRoom);
-        }
+        await _gameService.StartGameAsync(roomId, maxNumberOfRounds, durationPerUserInSeconds, await _lobbyService.GetUsernamesForLobby(roomId));
+        await Clients.Group(roomId).SendAsync("GameStarted");
     }
 }

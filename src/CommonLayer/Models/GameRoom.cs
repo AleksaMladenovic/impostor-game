@@ -10,7 +10,7 @@ public class GameRoom
     // Key: UserId, Value: Player object
     public Dictionary<string, Player> Players { get; set; } = new();
 
-    public GameState State { get; set; } = GameState.Lobby;
+    public GameState State { get; set; } = GameState.ShowSecret;
 
     // Podešavanja igre koja je postavio host
     public int NumberOfRounds { get; set; } = 5;

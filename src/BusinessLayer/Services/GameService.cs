@@ -1,5 +1,6 @@
 using CommonLayer.Interfaces;
 using CommonLayer.Models;
+using MyApp.CommonLayer.DTOs;
 using MyApp.CommonLayer.Enums;
 using MyApp.CommonLayer.Interfaces;
 using MyApp.CommonLayer.Models;
@@ -30,35 +31,95 @@ public class GameService : IGameService
         return await _gameRoomRepository.GetByIdAsync(roomId);
     }
 
-    public async Task StartGameAsync(string roomId, int maxNumberOfRounds, int durationPerUserInSeconds)
+    public async Task StartGameAsync(string roomId, int maxNumberOfRounds, int durationPerUserInSeconds, List<string> usernames)
     {
-        var room = await _gameRoomRepository.GetByIdAsync(roomId);
-        if (room == null)
+        GameStatesInSeconds.Values[ (int)GameState.InProgress ] = durationPerUserInSeconds;
+        string secretWord = await _secretWordService.GetRandomSecretWordAsync();
+        await _gameRoomRepository.SetUsers(roomId, usernames);
+        await _gameRoomRepository.SetStartingSettings(roomId,
+            maxNumberOfRounds, 
+            durationPerUserInSeconds, 
+            usernames[Random.Shared.Next(usernames.Count)], 
+            usernames[Random.Shared.Next(usernames.Count)],
+            secretWord
+            );
+        await _gameRoomRepository.SetNewState(roomId, GameState.ShowSecret, durationPerUserInSeconds);
+    }
+ 
+    public async Task<ReturnState> GetStateAsync(string roomId)
+    {
+        var state = await _gameRoomRepository.GetCurrentState(roomId);
+        switch(state.State)
         {
-            throw new Exception("Room not found");
+            case GameState.ShowSecret:
+                state.ShowSecretStates = await _gameRoomRepository.GetShowSecretStateDetails(roomId);
+                break;
+            case GameState.InProgress:
+                state.InProgressStates = new InProgressStates
+                {
+                    CurrentPlayer = await _gameRoomRepository.GetCurrentPlayer(roomId),
+                    RoundNumber = await _gameRoomRepository.GetCurrentRound(roomId),
+                    MaxRounds = await _gameRoomRepository.GetMaxNumberOfRounds(roomId)
+                };
+                break;
+            case GameState.Voting:
+                state.VotingStates = new VotingStates();
+                break;
+            case GameState.GameFinished:
+                break;
         }
+        return state;
+    }
 
-        room.NumberOfRounds = maxNumberOfRounds;
-        room.SecondsPerTurn = durationPerUserInSeconds;
-        room.State = GameState.InProgress;
-        room.CurrentRound = 1;
-        room.TurnsTakenInCurrentRound = 0;
-        room.SecretWord = await _secretWordService.GetRandomSecretWordAsync();
-
-        // Izaberi nasumičnog igrača za prvi potez
-        var playerIds = room.Players.Keys.ToList();
-
-        room.CurrentTurnPlayerId = playerIds[Random.Shared.Next(playerIds.Count)];
-        room.CurrentTurnPlayerUsername = _userService.GetUserById(room.CurrentTurnPlayerId).Username;
-
-        room.UserIdOfImpostor = playerIds[Random.Shared.Next(playerIds.Count)];
-        room.UsernameOfImpostor= _userService.GetUserById(room.UserIdOfImpostor).Username;
-
-        room.SubmittedClues.Clear();
-        room.Votes.Clear();
-
-        await _gameRoomRepository.SaveAsync(room);
-
+    public async Task SetNextStateAsync(string roomId)
+    {
+        var currentState = await _gameRoomRepository.GetCurrentState(roomId);
+        GameState nextState;
+        switch (currentState.State)
+        {
+            case GameState.ShowSecret:
+                nextState = GameState.InProgress;
+                break;
+            case GameState.InProgress:
+                var currentPlayer = await _gameRoomRepository.GetCurrentPlayer(roomId);
+                var users = await _gameRoomRepository.GetUsers(roomId);
+                int currentIndex = users.FindIndex(u => u == currentPlayer);
+                int nextIndex = (currentIndex + 1) % users.Count;
+                var nextPlayer = users[nextIndex];
+                var firstPlayer = await _gameRoomRepository.GetFirstPlayer(roomId);
+                if(nextPlayer ==  firstPlayer)
+                nextState = GameState.Voting;
+                else nextState = GameState.InProgress;
+                await _gameRoomRepository.UpdateCurrentPlayer(roomId, nextPlayer);
+                break;
+            case GameState.Voting:
+                var currentRound = await _gameRoomRepository.GetCurrentRound(roomId);
+                var maxRounds = await _gameRoomRepository.GetMaxNumberOfRounds(roomId);
+                if (currentRound >= maxRounds)
+                    nextState = GameState.GameFinished;
+                else
+                {
+                    await _gameRoomRepository.IncrementAndGetCurrentRound(roomId);
+                    nextState = GameState.InProgress;
+                }
+                break;
+            default:
+                nextState = GameState.InProgress;
+                break;
+        }
+        if(nextState == GameState.GameFinished)
+        {
+            await _gameRoomRepository.SetNewState(roomId, nextState, 0);    
+            return;
+        }else if(nextState == GameState.InProgress)
+        {
+            await _gameRoomRepository.SetNewState(roomId, nextState, await _gameRoomRepository.GetDurationPerUserInSeconds(roomId));    
+            return;
+        }else
+        {
+            await _gameRoomRepository.SetNewState(roomId, nextState, GameStatesInSeconds.Values[(int)nextState]);    
+            return;
+        }
     }
 
     public async Task SendMessageToRoomAsync(string roomId, Message message)

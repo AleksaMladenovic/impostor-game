@@ -1,4 +1,5 @@
 using CommonLayer.Models;
+using MyApp.CommonLayer.DTOs;
 using MyApp.CommonLayer.Models;
 
 namespace MyApp.CommonLayer.Interfaces;
@@ -6,7 +7,7 @@ namespace MyApp.CommonLayer.Interfaces;
 public interface IGameService
 {
     Task<GameRoom>? GetRoomAsync(string roomId);
-    Task StartGameAsync(string roomId, int maxNumberOfRounds, int durationPerUserInSeconds);
+    Task StartGameAsync(string roomId, int maxNumberOfRounds, int durationPerUserInSeconds, List<string> usernames);
     Task SendMessageToRoomAsync(string roomId, Message message);
     Task<List<Message>> GetMessagesFromRoomAsync(string roomId);
 
@@ -15,4 +16,6 @@ public interface IGameService
     Task<GameRoom?> AdvanceTurnAsync(string roomId);
 
     Task RegisterVoteAsync(string roomId, Vote vote);
+    Task<ReturnState> GetStateAsync(string roomId);
+    Task SetNextStateAsync(string roomId);
 }
