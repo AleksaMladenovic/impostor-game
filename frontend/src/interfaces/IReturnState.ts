@@ -4,8 +4,9 @@ export enum GameState {
     ShowSecret = 0,
     InProgress = 1,
     Voting = 2,
-    RoundFinished = 3,
-    GameFinished = 4,
+    VoteResult = 3,   
+    RoundFinished = 4,
+    GameFinished = 5,
 }
 
 
@@ -35,4 +36,5 @@ export interface IVotingStates {}
 
 export interface IGameFinishedStates {
     impostorWon: boolean;
+    playerVoteImpostor: Record<string, boolean>;
 }

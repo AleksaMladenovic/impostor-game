@@ -5,6 +5,7 @@ public enum GameState
     ShowSecret,        // Igrači se okupljaju u lobiju
     InProgress,   // Igra je u toku
     Voting,       // Faza glasanja
+    VoteResult,   // Prikaz rezultata glasanja
     RoundFinished,// Kraj runde, prikaz rezultata
     GameFinished  // Kraj cele partije
 }

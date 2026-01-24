@@ -165,6 +165,12 @@ public class RedisGameRoomRepository : IGameRoomRepository
         return users.Select(u => u.ToString()).ToList();
     }
 
+    public async Task<int> NumberOfUsers(string roomId)
+    {
+        var key = $"game:room:{roomId}:users";
+        return (int)await _redisDb.SetLengthAsync(key);
+    }
+
     public async Task<string> GetFirstPlayer(string roomId)
     {
         var settingsKey = $"game:room:{roomId}:settings";
@@ -194,5 +200,27 @@ public class RedisGameRoomRepository : IGameRoomRepository
     {
         var settingsKey = $"game:room:{roomId}:settings";
         return _redisDb.HashGetAsync(settingsKey, "DurationPerUserInSeconds").ContinueWith(t => (int)t.Result);
+    }
+
+    public Task SetEdjectedPlayer(string roomId, string? ejectedPlayer)
+    {
+        var settingsKey = $"game:room:{roomId}:settings";
+        return _redisDb.HashSetAsync(settingsKey, "EjectedPlayer", ejectedPlayer ?? "");
+    }
+
+    public Task<string?> GetEdjectedPlayer(string roomId)
+    {
+        var settingsKey = $"game:room:{roomId}:settings";
+        return _redisDb.HashGetAsync(settingsKey, "EjectedPlayer").ContinueWith(t =>
+        {
+            var result = t.Result;
+            return result.IsNullOrEmpty ? null : result.ToString();
+        });
+    }
+
+    public Task<string> GetImpostorUsername(string roomId)
+    {
+        var settingsKey = $"game:room:{roomId}:settings";
+        return _redisDb.HashGetAsync(settingsKey, "ImpostorUsername").ContinueWith(t => t.Result.ToString() ?? "");
     }
 }

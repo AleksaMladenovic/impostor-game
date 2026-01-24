@@ -4,6 +4,7 @@ using MyApp.CommonLayer.DTOs;
 using MyApp.CommonLayer.Enums;
 using MyApp.CommonLayer.Interfaces;
 using MyApp.CommonLayer.Models;
+using Microsoft.AspNetCore.SignalR;
 
 namespace MyApp.BusinessLayer.Services;
 
@@ -15,7 +16,6 @@ public class GameService : IGameService
     private readonly IChatRepository _chatRepository;
     private readonly IVoteRepository _voteRepository;
     private readonly IClueRepository _clueRepository;
-
     public GameService(IGameRoomRepository gameRoomRepository, ISecretWordService secretWordService, IChatRepository chatRepository,IClueRepository clueRepository,IUserService user,IVoteRepository voteRepository)
     {
         _gameRoomRepository = gameRoomRepository;
@@ -66,6 +66,17 @@ public class GameService : IGameService
                 state.VotingStates = new VotingStates();
                 break;
             case GameState.GameFinished:
+                state.GameFinishedStates = new GameFinishedStates();
+                var ejectedPlayer = await _gameRoomRepository.GetEdjectedPlayer(roomId);
+                var users = await _gameRoomRepository.GetUsers(roomId);
+                var votes = await _voteRepository.GetVotesAsync(roomId, await _gameRoomRepository.GetCurrentRound(roomId));
+                var impostorUsername = await _gameRoomRepository.GetImpostorUsername(roomId);
+                foreach (var user in users)
+                {
+                    var votedImpostor = votes.FirstOrDefault(v => v.Username == user)?.TargetUsername == impostorUsername;
+                    state.GameFinishedStates.PlayerVoteImpostor[user] = votedImpostor;
+                }
+                state.GameFinishedStates.ImpostorWon = ejectedPlayer != impostorUsername;
                 break;
         }
         return state;
@@ -95,8 +106,24 @@ public class GameService : IGameService
             case GameState.Voting:
                 var currentRound = await _gameRoomRepository.GetCurrentRound(roomId);
                 var maxRounds = await _gameRoomRepository.GetMaxNumberOfRounds(roomId);
-                if (currentRound >= maxRounds)
+                var votes = await _voteRepository.GetVotesAsync(roomId, currentRound);
+                var voteCounts = votes.GroupBy(v => v.TargetUsername)
+                                      .ToDictionary(g => g.Key, g => g.Count());
+                string? ejectedPlayer = null;
+                if (voteCounts.Count > 0)
+                {
+                    int maxVotes = voteCounts.Values.Max();
+                    var topCandidates = voteCounts.Where(kv => kv.Value == maxVotes).Select(kv => kv.Key).ToList();
+                    if (topCandidates[0]!="" && topCandidates.Count == 1 && voteCounts[topCandidates[0]] >= (await _gameRoomRepository.NumberOfUsers(roomId)) / 2)
+                    {
+                        ejectedPlayer = topCandidates[0];
+                    }
+                }
+                if (currentRound >= maxRounds || ejectedPlayer != null)
+                {
+                    await _gameRoomRepository.SetEdjectedPlayer(roomId, ejectedPlayer);
                     nextState = GameState.GameFinished;
+                }
                 else
                 {
                     await _gameRoomRepository.IncrementAndGetCurrentRound(roomId);
@@ -109,7 +136,8 @@ public class GameService : IGameService
         }
         if(nextState == GameState.GameFinished)
         {
-            await _gameRoomRepository.SetNewState(roomId, nextState, 0);    
+            await _gameRoomRepository.SetNewState(roomId, nextState, 0);
+
             return;
         }else if(nextState == GameState.InProgress)
         {
@@ -208,56 +236,9 @@ public class GameService : IGameService
         return room;
     }
 
-    public async Task RegisterVoteAsync(string roomId, Vote vote)
+    public async Task RegisterVoteAsync(Vote vote)
     {
-        await _voteRepository.AddVoteAsync(roomId, vote);
-
-        var room = await _gameRoomRepository.GetByIdAsync(roomId);
-        var allVotes = await _voteRepository.GetVotesAsync(roomId);
-
-        if (room != null && allVotes.Count >= room.Players.Count)
-        {
-            var voteCounts = allVotes
-                .GroupBy(v => v.TargetId)
-                .Select(g => new { Id = g.Key, Count = g.Count() })
-                .OrderByDescending(x => x.Count)
-                .ToList();
-
-            if (voteCounts.Count > 0 && voteCounts[0].Id != "skip")
-            {
-                bool isTie = voteCounts.Count > 1 && voteCounts[0].Count == voteCounts[1].Count;
-
-                if (!isTie)
-                {
-                    var winner = voteCounts[0];
-                    room.LastEjectedUserId = winner.Id;
-                    room.LastEjectedUsername = allVotes.First(v => v.TargetId == winner.Id).TargetUsername;
-
-                    if (room.LastEjectedUserId == room.UserIdOfImpostor)
-                    {
-                        room.IsGameOver = true;
-                        room.State = GameState.GameFinished; 
-                    }
-                }
-                else
-                {
-                    room.LastEjectedUsername = "Nerešeno"; 
-                }
-            }
-            else
-            {
-                room.LastEjectedUsername = "Preskočeno"; 
-            }
-
-            
-            if (!room.IsGameOver)
-            {
-                room.State = GameState.InProgress;
-                room.CurrentRound++;
-            }
-
-            await _voteRepository.ClearVotesAsync(roomId);
-            await _gameRoomRepository.SaveAsync(room);
-        }
+        await _voteRepository.AddVoteAsync( vote);
     }
 }
+

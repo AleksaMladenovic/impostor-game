@@ -15,7 +15,7 @@ public interface IGameService
     Task<List<Clue>> GetCluesFromRoomAsync(string roomId);
     Task<GameRoom?> AdvanceTurnAsync(string roomId);
 
-    Task RegisterVoteAsync(string roomId, Vote vote);
+    Task RegisterVoteAsync(Vote vote);
     Task<ReturnState> GetStateAsync(string roomId);
     Task SetNextStateAsync(string roomId);
 }

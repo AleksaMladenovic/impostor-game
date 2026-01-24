@@ -8,9 +8,9 @@ namespace CommonLayer.Models
 {
     public class Vote
     {
-        public required string UserId { get; set; }
+        public required string RoomId { get; set; }
+        public int Round { get; set; }
         public required string Username { get; set; }
-        public required string TargetId { get; set; }
-        public required string TargetUsername { get; set; }
+        public string? TargetUsername { get; set; }
     }
 }

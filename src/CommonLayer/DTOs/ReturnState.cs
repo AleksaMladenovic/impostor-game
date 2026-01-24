@@ -33,5 +33,6 @@ public class VotingStates
 
 public class GameFinishedStates
 {
+    public Dictionary<string, bool> PlayerVoteImpostor { get; set; } = new Dictionary<string, bool>();
     public bool ImpostorWon { get; set; }
 }

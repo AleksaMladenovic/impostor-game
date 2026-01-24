@@ -111,27 +111,12 @@ public class GameHub : Hub
     }
 
 
-    public async Task VoteForPlayer(string roomId, VoteDto voteDto)
+    public async Task VoteForPlayer(Vote vote)
     {
         try
         {
-            var voteModel = new Vote
-            {
-                UserId = voteDto.UserId,
-                Username = voteDto.Username,
-                TargetId = voteDto.TargetId ?? "skip",
-                TargetUsername = voteDto.TargetUsername ?? "Preskočeno"
-            };
-
-            await _gameService.RegisterVoteAsync(roomId, voteModel);
-
-            await Clients.Group(roomId).SendAsync("UserVoted", voteDto.Username);
-
-            var updatedRoom = await _gameService.GetRoomAsync(roomId);
-            if (updatedRoom != null)
-            {
-                await Clients.Group(roomId).SendAsync("RoomUpdated", updatedRoom);
-            }
+            await _gameService.RegisterVoteAsync(vote);
+            await Clients.Group(vote.RoomId).SendAsync("UserVoted", vote.Username);
         }
         catch (Exception ex)
         {

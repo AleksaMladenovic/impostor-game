@@ -14,7 +14,7 @@ export interface IMessage {
 }
 export interface IClue {
     userId: string;
-    username: string; 
+    username: string;
     clueWord: string;
     timestamp: string;
 }
@@ -23,7 +23,7 @@ const Game: React.FC = () => {
     const location = useLocation();
     const { roomId } = useParams();
     const { user } = useAuth();
-    
+
     // --- STATE ---
     // const { roomDetails: initialRoomDetails } = location.state as { roomDetails: SendRoom };
     const [connection, setConnection] = useState<HubConnection | null>(null);
@@ -51,6 +51,7 @@ const Game: React.FC = () => {
     const [roundNumber, setRoundNumber] = useState<number>(1);
     const [maxRounds, setMaxRounds] = useState<number>(1);
     const [secretWord, setSecretWord] = useState<string>("");
+    const [numOfPlayers, setNumOfPlayers] = useState<number>(0);
     // --- DINAMIČKE VARIJABLE ---
     // Koristimo currentRoom jer se on menja kroz SignalR
     // const isImpostor = user?.username === currentRoom.usernameOfImpostor;
@@ -79,7 +80,7 @@ const Game: React.FC = () => {
     // 1. Kontrola Intro ekrana - izvršava se samo jednom kada se konekcija uspostavi
     useEffect(() => {
         if (!connection) return; // Čekaj da se konekcija uspostavi
-        
+
         const timer = setTimeout(() => {
             setShowIntro(false);
             console.log("Intro završen, obaveštavanje servera...");
@@ -87,7 +88,7 @@ const Game: React.FC = () => {
             connection.invoke("StateEnded", roomId, currentStateNumber)
                 .catch(err => console.error("Greška pri obaveštavanju o završetku stanja:", err));
         }, 5000);
-        
+
         return () => clearTimeout(timer);
     }, [connection]); // Samo connection u dependency array - izvršava se jednom!
 
@@ -105,6 +106,8 @@ const Game: React.FC = () => {
         if (gameState?.state === GameState.ShowSecret) {
             setShowIntro(true);
             setIsImpostor(user?.username === gameState!.showSecretStates?.impostorName);
+            setNumOfPlayers(gameState!.showSecretStates?.players.length || 0);
+            console.log("Postavljeno broj igrača:", gameState!.showSecretStates?.players.length || 0);
             setPlayers(gameState!.showSecretStates?.players || []);
             setIsVotingPhase(false);
             setSecretWord(gameState!.showSecretStates?.secretWord || "");
@@ -116,19 +119,26 @@ const Game: React.FC = () => {
             setRoundNumber(gameState!.inProgressStates?.roundNumber || 1);
             setMaxRounds(gameState!.inProgressStates?.maxRounds || 1);
             setIsVotingPhase(false);
+            setVotedPlayers([]);
+            setHasVoted(false);
         } else if (gameState?.state === GameState.Voting) {
             setShowIntro(false);
             setIsVotingPhase(true);
             setIsMyTurn(false);
-        } else {
+        } else if (gameState?.state === GameState.GameFinished) {
+            setVotedPlayers([]);
+            setHasVoted(false);
+            console.log("Runda završena, priprema za sledeću...");
+        }
+        else {
             setShowIntro(false);
             setIsVotingPhase(false);
             setIsMyTurn(false);
         }
     }
-    ,[gameState])
+        , [gameState])
 
-   // 3. SIGNALR LISTENERS (Sređen cleanup da spreči dupliranje)
+    // 3. SIGNALR LISTENERS (Sređen cleanup da spreči dupliranje)
     useEffect(() => {
         if (!connection) return;
 
@@ -140,7 +150,7 @@ const Game: React.FC = () => {
 
         connection.invoke("JoinGame", roomId)
 
-        connection.on("GameState", (IReturnState, stateNumber:number) => {
+        connection.on("GameState", (IReturnState: IReturnState, stateNumber: number) => {
             console.log("Stiglo stanje igre:", IReturnState, stateNumber);
             setGameState(IReturnState);
             setCurrentStateNumber(stateNumber);
@@ -155,7 +165,10 @@ const Game: React.FC = () => {
         });
 
         connection.on("UserVoted", (username: string) => {
-            setVotedPlayers(prev => [...prev, username]);
+            setVotedPlayers(prev => {
+                const updated = [...prev, username];
+                return updated;
+            });
         });
 
         // connection.on("RoomUpdated", (updatedRoom: SendRoom) => {
@@ -165,7 +178,7 @@ const Game: React.FC = () => {
         //         if (prevRoom.state === 2 && updatedRoom.state !== 2) {
         //             setHasVoted(false);
         //             setVotedPlayers([]);
-                    
+
         //             if (updatedRoom.lastEjectedUsername) {
         //                 setShowEjectionScreen(true);
         //                 setTimeout(() => setShowEjectionScreen(false), 5000);
@@ -185,6 +198,17 @@ const Game: React.FC = () => {
         };
     }, [connection]); // Uklonjen currentRoom.state iz zavisnosti da se ne bi restartovalo stalno
 
+
+    useEffect(() => {
+        console.log("Ukupno glasalo:", votedPlayers.length, "od", numOfPlayers);
+        if (isVotingPhase && votedPlayers.length === numOfPlayers) {
+            if (!connection) return;
+            setVotedPlayers([]);
+            setHasVoted(false);
+            connection.invoke("StateEnded", roomId, currentStateNumber)
+                .catch(err => console.error("Greška pri obaveštavanju o završetku stanja:", err));
+        }
+    }, [connection, roomId, currentStateNumber, isVotingPhase, votedPlayers, numOfPlayers])
     // Dodatni mali effect za čišćenje glasanja
     // useEffect(() => {
     //     if (!isVotingPhase) {
@@ -233,17 +257,18 @@ const Game: React.FC = () => {
         connection.invoke("StateEnded", roomId, currentStateNumber)
     };
     const handleVote = (targetUsername: string | null) => {
-    if (hasVoted || !connection) return;
+        if (hasVoted || !connection) return;
 
-    const voteDto = {
-        userId: user?.id,
-        username: user?.username,
-        targetUsername: targetUsername || "Preskočeno"
-    };
+        const voteDto = {
+            roomId: roomId,
+            round: roundNumber,
+            username: user?.username,
+            targetUsername: targetUsername,
+        };
 
-    connection.invoke("VoteForPlayer", roomId, voteDto)
-        .then(() => setHasVoted(true))
-        .catch(err => console.error("Greška pri glasanju:", err));
+        connection.invoke("VoteForPlayer", voteDto)
+            .then(() => setHasVoted(true))
+            .catch(err => console.error("Greška pri glasanju:", err));
     };
 
     return (
@@ -264,9 +289,8 @@ const Game: React.FC = () => {
                             animate={{ letterSpacing: "0.2em", opacity: 1, scale: 1 }}
                             transition={{ duration: 1.5, ease: "easeOut" }}
                         >
-                            <h1 className={`text-6xl md:text-8xl font-black italic uppercase tracking-tighter mb-4 ${
-                                isImpostor ? 'text-red-600 shadow-[0_0_50px_rgba(220,38,38,0.5)]' : 'text-blue-500 shadow-[0_0_50px_rgba(59,130,246,0.5)]'
-                            }`}>
+                            <h1 className={`text-6xl md:text-8xl font-black italic uppercase tracking-tighter mb-4 ${isImpostor ? 'text-red-600 shadow-[0_0_50px_rgba(220,38,38,0.5)]' : 'text-blue-500 shadow-[0_0_50px_rgba(59,130,246,0.5)]'
+                                }`}>
                                 {isImpostor ? 'IMPOSTOR' : 'CREWMATE'}
                             </h1>
                         </motion.div>
@@ -277,18 +301,18 @@ const Game: React.FC = () => {
                 ) : (
                     /* --- PHASE 2: MAIN GAME UI --- */
                     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex h-screen w-full relative">
-                        
+
                         {/* ANIMIRANA POZADINA */}
                         <div className="absolute inset-0 pointer-events-none z-0 overflow-hidden">
-                            <motion.div 
+                            <motion.div
                                 animate={{ x: [-20, 40, -20], y: [-10, 30, -10], scale: [1, 1.1, 1] }}
                                 transition={{ duration: 15, repeat: Infinity, ease: "easeInOut" }}
-                                className="absolute top-[-10%] left-[-10%] w-[60%] h-[60%] bg-white/[0.04] blur-[130px] rounded-full" 
+                                className="absolute top-[-10%] left-[-10%] w-[60%] h-[60%] bg-white/[0.04] blur-[130px] rounded-full"
                             />
-                            <motion.div 
+                            <motion.div
                                 animate={{ x: [20, -40, 20], y: [10, -30, 10], scale: [1.1, 1, 1.1] }}
                                 transition={{ duration: 20, repeat: Infinity, ease: "easeInOut", delay: 2 }}
-                                className="absolute bottom-[-10%] right-[-10%] w-[60%] h-[60%] bg-white/[0.03] blur-[130px] rounded-full" 
+                                className="absolute bottom-[-10%] right-[-10%] w-[60%] h-[60%] bg-white/[0.03] blur-[130px] rounded-full"
                             />
                         </div>
 
@@ -310,7 +334,7 @@ const Game: React.FC = () => {
                                     <History size={14} className="text-blue-400" /> Istorija Tragova
                                 </h2>
                             </div>
-                            
+
                             <div className="flex-grow overflow-y-auto p-4 space-y-3">
                                 {clues.map((clueItem, index) => (
                                     <div key={index} className="p-4 rounded-2xl border bg-white/5 border-white/10">
@@ -329,13 +353,13 @@ const Game: React.FC = () => {
                                             <Edit3 size={16} />
                                             <span className="text-[10px] font-black uppercase tracking-widest">Tvoj red</span>
                                         </div>
-                                        <input 
+                                        <input
                                             type="text"
                                             placeholder="UNESI TRAG..."
                                             className="w-full bg-white/5 border-b-2 border-white/10 p-3 text-sm focus:border-blue-500 outline-none uppercase font-bold text-white"
-                                            value={clue} 
-                                            onChange={(e) => setClue(e.target.value)} 
-                                            onKeyDown={(e) => e.key === 'Enter' && handleSendClue()} 
+                                            value={clue}
+                                            onChange={(e) => setClue(e.target.value)}
+                                            onKeyDown={(e) => e.key === 'Enter' && handleSendClue()}
                                         />
                                         <button onClick={handleSendClue} className="w-full py-3 bg-white text-black font-black rounded-xl text-xs uppercase tracking-widest hover:bg-gray-200 transition-all">
                                             POTVRDI
@@ -344,66 +368,65 @@ const Game: React.FC = () => {
                                 ) : (
                                     <div className="text-center py-4">
                                         <p className="text-[10px] text-gray-600 font-bold uppercase tracking-widest">
-                                            Čekamo da <br/> <span className="text-blue-400">{currentTurnUsername}</span> <br/> unese trag
+                                            Čekamo da <br /> <span className="text-blue-400">{currentTurnUsername}</span> <br /> unese trag
                                         </p>
                                     </div>
                                 )}
                             </div>
                         </aside>
 
-                          {/* --- 1. MODAL ZA GLASANJE --- */}
-                            <AnimatePresence>
-                                {isVotingPhase && (
-                                    <motion.div 
-                                        initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                                        className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-md flex items-center justify-center p-4"
-                                    >
-                                        <div className="bg-white/[0.03] border border-white/10 p-10 rounded-[3rem] max-w-4xl w-full shadow-2xl relative overflow-hidden">
-                                            <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-red-600 to-transparent" />
-                                            
-                                            <div className="text-center mb-10">
-                                                <h2 className="text-4xl font-black italic uppercase tracking-tighter text-white">GLASANJE</h2>
-                                                <p className="text-gray-500 text-xs font-bold tracking-[0.3em] mt-2">IDENTIFIKUJTE IMPOSTORA</p>
-                                            </div>
+                        {/* --- 1. MODAL ZA GLASANJE --- */}
+                        <AnimatePresence>
+                            {isVotingPhase && (
+                                <motion.div
+                                    initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                                    className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-md flex items-center justify-center p-4"
+                                >
+                                    <div className="bg-white/[0.03] border border-white/10 p-10 rounded-[3rem] max-w-4xl w-full shadow-2xl relative overflow-hidden">
+                                        <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-red-600 to-transparent" />
 
-                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-10">
-                                                {Object.values(players)
-                                                    .filter(p => p !== user?.username) // Svi osim TEBE
-                                                    .map((player) => (
-                                                        <button
-                                                            key={player}
-                                                            disabled={hasVoted}
-                                                            onClick={() => handleVote(player)}
-                                                            className={`flex items-center justify-between p-5 rounded-2xl border transition-all ${
-                                                                hasVoted ? 'opacity-50 cursor-default border-white/5' : 'bg-white/5 border-white/10 hover:border-red-500/50 hover:bg-white/[0.08]'
-                                                            }`}
-                                                        >
-                                                            <div className="flex items-center gap-4">
-                                                                <div className="w-10 h-10 rounded-xl bg-gray-800 flex items-center justify-center font-bold">{player[0]}</div>
-                                                                <span className="font-black uppercase tracking-tight">{player}</span>
-                                                            </div>
-                                                            {/* Prikaz kvačice ako je igrač glasao */}
-                                                            {votedPlayers.includes(player) && (
-                                                                <div className="bg-green-500/20 text-green-500 text-[10px] px-2 py-1 rounded-md font-bold">SPREMAN</div>
-                                                            )}
-                                                        </button>
-                                                    ))}
-                                            </div>
-
-                                            <button 
-                                                disabled={hasVoted}
-                                                onClick={() => handleVote(null)}
-                                                className="px-8 py-4 bg-white/5 border border-white/10 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-white/10 transition-all"
-                                            >
-                                                {hasVoted ? "Glasano" : "Skip Vote"}
-                                            </button>
+                                        <div className="text-center mb-10">
+                                            <h2 className="text-4xl font-black italic uppercase tracking-tighter text-white">GLASANJE</h2>
+                                            <p className="text-gray-500 text-xs font-bold tracking-[0.3em] mt-2">IDENTIFIKUJTE IMPOSTORA</p>
                                         </div>
-                                    </motion.div>
-                                )}
-                            </AnimatePresence>
 
-                            {/* --- 2. CINEMATIC EJECTION EKRAN --- */}
-                            {/* <AnimatePresence>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-10">
+                                            {players
+                                                .filter(p => p !== user?.username) // Svi osim TEBE
+                                                .map((player) => (
+                                                    <button
+                                                        key={player}
+                                                        disabled={hasVoted}
+                                                        onClick={() => handleVote(player)}
+                                                        className={`flex items-center justify-between p-5 rounded-2xl border transition-all ${hasVoted ? 'opacity-50 cursor-default border-white/5' : 'bg-white/5 border-white/10 hover:border-red-500/50 hover:bg-white/[0.08]'
+                                                            }`}
+                                                    >
+                                                        <div className="flex items-center gap-4">
+                                                            <div className="w-10 h-10 rounded-xl bg-gray-800 flex items-center justify-center font-bold">{player[0]}</div>
+                                                            <span className="font-black uppercase tracking-tight">{player}</span>
+                                                        </div>
+                                                        {/* Prikaz kvačice ako je igrač glasao */}
+                                                        {votedPlayers.includes(player) && (
+                                                            <div className="bg-green-500/20 text-green-500 text-[10px] px-2 py-1 rounded-md font-bold">SPREMAN</div>
+                                                        )}
+                                                    </button>
+                                                ))}
+                                        </div>
+
+                                        <button
+                                            disabled={hasVoted}
+                                            onClick={() => handleVote(null)}
+                                            className="px-8 py-4 bg-white/5 border border-white/10 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-white/10 transition-all"
+                                        >
+                                            {hasVoted ? "Glasano" : "Skip Vote"}
+                                        </button>
+                                    </div>
+                                </motion.div>
+                            )}
+                        </AnimatePresence>
+
+                        {/* --- 2. CINEMATIC EJECTION EKRAN --- */}
+                        {/* <AnimatePresence>
                                 {showEjectionScreen && (
                                     <motion.div 
                                         initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }}
@@ -463,7 +486,7 @@ const Game: React.FC = () => {
                             </div>
                             <div className="p-6 bg-black/40 border-t border-white/10">
                                 <form className="flex gap-2" onSubmit={handleSendMessage}>
-                                    <input 
+                                    <input
                                         type="text"
                                         placeholder="Poruka..."
                                         className="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-4 text-sm outline-none"

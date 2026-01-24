@@ -9,8 +9,9 @@ namespace CommonLayer.Interfaces
 {
     public interface IVoteRepository
     {
-        Task AddVoteAsync(string roomId, Vote vote);
-        Task<List<Vote>> GetVotesAsync(string roomId);
+        Task AddVoteAsync(Vote vote);
+        Task<List<Vote>> GetAllVotesAsync(string roomId);
+        Task<List<Vote>> GetVotesAsync(string roomId, int round);
         Task ClearVotesAsync(string roomId);
     }
 }
