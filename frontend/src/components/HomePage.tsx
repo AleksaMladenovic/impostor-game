@@ -3,8 +3,8 @@ import axios from 'axios';
 import Lobby from './Lobby';
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
+import api from '../axios';
 
-const API_URL = "https://localhost:7277";
 
 function HomePage() {
     const [joinRoomIdInput, setJoinRoomIdInput] = useState('');
@@ -14,7 +14,7 @@ function HomePage() {
     const handleCreateRoom = async () => {
         setLoading(true);
         try {
-            const response = await axios.post(`${API_URL}/api/Rooms/create`);
+            const response = await api.post(`/Rooms/create`);
             navigate(`/lobby/${response.data.roomId}`); 
         } catch (error) {
             alert("Greška na serveru!");

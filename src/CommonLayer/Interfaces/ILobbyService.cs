@@ -14,5 +14,7 @@ public interface ILobbyService
     Task<string> GetHostOfRoomAsync(string roomId);
     Task RecconectPlayerAsync(string roomId, string connectionId, string username);
     Task<bool> RoomContainsPlayerAsync(string roomId, string username);
+    Task RestartRoomAsync(string roomId);
+    
     // Dodaj ostale metode koje će ti trebati
 }

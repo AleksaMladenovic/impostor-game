@@ -75,4 +75,13 @@ public class LobbyService : ILobbyService
     {
         return await _lobbyRepository.RoomContainsPlayerAsync(roomId, username);
     }
+
+    public async Task RestartRoomAsync(string roomId)
+    {
+        //TODO: Postoji bug ako pokrenu igru pa se neki onda restartuje, mora da se proveri da li igra nije pocela
+        if(!await _lobbyRepository.DoesLobbyExistAsync(roomId))
+        {
+            await _lobbyRepository.SaveAsync(roomId);
+        }
+    }
 }

@@ -22,4 +22,11 @@ public class RoomsController : ControllerBase
         var response = new CreateRoomResponse { RoomId = room };
         return Ok(response);
     }
+
+    [HttpPost("{roomId}/restart")]
+    public async Task<IActionResult> RestartRoom([FromRoute] string roomId)
+    {
+        await _lobbyService.RestartRoomAsync(roomId);
+        return Ok();
+    }
 }
