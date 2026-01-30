@@ -10,10 +10,12 @@ namespace Backend.Controllers
     public class UserController : ControllerBase
     {
         private readonly IUserService _userService;
+        private readonly IHistoryRepository _historyRepository;
 
-        public UserController(IUserService userService)
+        public UserController(IUserService userService, IHistoryRepository historyRepository)
         {
             _userService = userService;
+            _historyRepository = historyRepository;
         }
 
         [HttpGet("{userId}")]
@@ -68,5 +70,27 @@ namespace Backend.Controllers
             var exists = _userService.UsernameAlreadyExist(username).Result;
             return Ok(exists);
         }
+
+        [HttpGet("history/{username}")]
+        public async Task<IActionResult> GetHistoryForUser(string username, [FromQuery] int count = 20, [FromQuery] int offset = 0)
+        {
+            var history = await _historyRepository.GetHistoryForUserAsync(username, count, offset);
+            return Ok(history);
+        }
+
+        [HttpGet("history/{gameId}/next")]
+        public async Task<IActionResult> GetNextAnyState(string gameId, [FromQuery] DateTime? lastTimestamp = null)
+        {
+            var (state, nextTime) = await _historyRepository.GetNextAnyStateAsync(gameId, lastTimestamp);
+            return Ok(new { state, nextTime });
+        }
+
+        [HttpGet("history/{gameId}/next-significant")]
+        public async Task<IActionResult> GetNextSignificantState(string gameId, [FromQuery] DateTime? lastTimestamp = null)
+        {
+            var (state, nextTime) = await _historyRepository.GetNextSignificantStateAsync(gameId, lastTimestamp);
+            return Ok(new { state, nextTime });
+        }
+
     }
 }

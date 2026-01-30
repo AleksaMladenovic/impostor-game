@@ -31,6 +31,17 @@ namespace DatabaseLayer.Repositories
                 await _redisDb.StringSetAsync(numOfRoundsKey, vote.Round);
             } 
             await _redisDb.HashSetAsync(key, vote.Username, vote.TargetUsername==null ? "" : vote.TargetUsername);
+
+            await _redisDb.ListRightPushAsync(
+                $"game:{vote.RoomId}:history",
+                System.Text.Json.JsonSerializer.Serialize(new {
+                    type = "vote",
+                    voter = vote.Username,
+                    target = vote.TargetUsername == null ? "" : vote.TargetUsername,
+                    round = vote.Round,
+                    timestamp = DateTime.UtcNow
+                })
+            );
         }
 
         public async Task ClearVotesAsync(string roomId)

@@ -18,16 +18,30 @@ namespace DatabaseLayer.Repositories
             _redisDb = redis.GetDatabase();
         }
 
-        public Task AddClueToRoomAsync(string roomId, Clue clue)
+        public async Task AddClueToRoomAsync(string roomId, Clue clue)
         {
             try
             {
                 string key = $"clues:{roomId}";
+                string history_key = $"game:{roomId}:history";
 
                 string serializedClue = System.Text.Json.JsonSerializer.Serialize(clue);
+                await _redisDb.ListRightPushAsync(key, serializedClue);
 
-                _redisDb.ListRightPush(key, serializedClue);
-                return Task.CompletedTask;
+                var currentRoundValue = await _redisDb.StringGetAsync($"game:room:{roomId}:currentRound");
+                int currentRound = currentRoundValue.IsNullOrEmpty ? 0 : (int)currentRoundValue;
+
+                await _redisDb.ListRightPushAsync(
+                    history_key,
+                    System.Text.Json.JsonSerializer.Serialize(new {
+                        type = "clue",
+                        username = clue.Username,
+                        content = clue.ClueWord,
+                        round = currentRound,
+                        timestamp = DateTime.UtcNow
+                    })
+                );
+                
             }
             catch(Exception ex) 
             {
@@ -36,16 +50,16 @@ namespace DatabaseLayer.Repositories
             }
         }
 
-        public Task<List<Clue>> GetCluesFromRoomAsync(string roomId)
+        public async Task<List<Clue>> GetCluesFromRoomAsync(string roomId)
         {
             try
             {
                 string key = $"clues:{roomId}";
-                var clueRedis = _redisDb.ListRange(key);
+                var clueRedis = await _redisDb.ListRangeAsync(key);
                 var clues= clueRedis.Select(clue=> System.Text.Json.JsonSerializer.Deserialize<Clue>(clue))
                                     .Where(clue=>clue!=null)
                                     .ToList();
-                return Task.FromResult(clues) as Task<List<Clue>>;
+                return clues;
             }
             catch (Exception ex)
             {

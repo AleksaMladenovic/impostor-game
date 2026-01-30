@@ -66,7 +66,6 @@ public class GameHub : Hub
         {
             var messageModel = new Message
             {
-                UserId = message.UserId,
                 Username = message.Username,
                 Content = message.Content,
                 Timestamp = DateTime.UtcNow

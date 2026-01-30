@@ -16,7 +16,8 @@ public class GameService : IGameService
     private readonly IChatRepository _chatRepository;
     private readonly IVoteRepository _voteRepository;
     private readonly IClueRepository _clueRepository;
-    public GameService(IGameRoomRepository gameRoomRepository, ISecretWordService secretWordService, IChatRepository chatRepository,IClueRepository clueRepository,IUserService user,IVoteRepository voteRepository)
+    private readonly IHistoryRepository _historyRepository;
+    public GameService(IGameRoomRepository gameRoomRepository, ISecretWordService secretWordService, IChatRepository chatRepository,IClueRepository clueRepository,IUserService user,IVoteRepository voteRepository, IHistoryRepository historyRepository)
     {
         _gameRoomRepository = gameRoomRepository;
         _secretWordService = secretWordService;
@@ -24,6 +25,7 @@ public class GameService : IGameService
         _clueRepository = clueRepository;
         _userService = user;
         _voteRepository = voteRepository;
+        _historyRepository = historyRepository;
     }
 
     public async Task<GameRoom>? GetRoomAsync(string roomId)
@@ -78,7 +80,8 @@ public class GameService : IGameService
                 state.GameFinishedStates = new GameFinishedStates();
                 var Ejected = await _gameRoomRepository.GetEdjectedPlayer(roomId);
                 var targetImpostor = await _gameRoomRepository.GetImpostorUsername(roomId);
-
+                //TODO proveri da li ovo radi i bez await
+                await SaveGameHistory(roomId);
                 state.GameFinishedStates.ImpostorWon = (Ejected != targetImpostor);
                 break;
         }
@@ -275,6 +278,13 @@ public class GameService : IGameService
     public async Task RegisterVoteAsync(Vote vote)
     {
         await _voteRepository.AddVoteAsync( vote);
+    }
+
+    public async Task SaveGameHistory(string roomId)
+    {
+        var listaEventa = await _gameRoomRepository.GetHistory(roomId);
+        var listaIgraca = await _gameRoomRepository.GetUsers(roomId);
+        await _historyRepository.SaveGameAsync(listaIgraca,roomId, listaEventa);
     }
 }
 

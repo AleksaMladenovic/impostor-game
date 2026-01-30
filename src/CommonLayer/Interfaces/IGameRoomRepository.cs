@@ -42,4 +42,5 @@ public interface IGameRoomRepository
     Task<int> GetDurationPerUserInSeconds(string roomId);
     Task SetEdjectedPlayer(string roomId, string? ejectedPlayer);
     Task<string?> GetEdjectedPlayer(string roomId);
+    Task<List<GameHistoryEvent>> GetHistory(string roomId);
 }

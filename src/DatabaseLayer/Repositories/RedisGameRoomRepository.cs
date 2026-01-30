@@ -223,4 +223,18 @@ public class RedisGameRoomRepository : IGameRoomRepository
         var settingsKey = $"game:room:{roomId}:settings";
         return _redisDb.HashGetAsync(settingsKey, "ImpostorUsername").ContinueWith(t => t.Result.ToString() ?? "");
     }
+
+    public async Task<List<GameHistoryEvent>> GetHistory(string roomId)
+    {
+        var history = await _redisDb.ListRangeAsync($"game:{roomId}:history", 0, -1);
+        var jsonOptions = new JsonSerializerOptions
+        {
+            PropertyNameCaseInsensitive = true
+        };
+        // Deserialize each entry to GameHistoryEvent
+        return history
+            .Select(h => JsonSerializer.Deserialize<GameHistoryEvent>(h.ToString(), jsonOptions))
+            .Where(e => e != null)
+            .ToList()!;
+    }
 }

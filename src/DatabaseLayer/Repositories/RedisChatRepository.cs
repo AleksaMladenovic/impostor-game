@@ -13,12 +13,21 @@ public class RedisChatRepository : IChatRepository
     }
     
 
-    public Task AddMessageToRoomAsync(string roomId, CommonLayer.Models.Message message)
+    public async Task AddMessageToRoomAsync(string roomId, CommonLayer.Models.Message message)
     {
         try
         {
-            _redisDb.ListRightPushAsync($"chat:{roomId}", System.Text.Json.JsonSerializer.Serialize(message));
-            return Task.CompletedTask;
+            await _redisDb.ListRightPushAsync($"chat:{roomId}", System.Text.Json.JsonSerializer.Serialize(message));
+            await _redisDb.ListRightPushAsync(
+                $"game:{roomId}:history",
+                System.Text.Json.JsonSerializer.Serialize(new {
+                    type = "message",
+                    username = message.Username,
+                    content = message.Content,
+                    round = 0,
+                    timestamp = DateTime.UtcNow
+                })
+            );
         }
         catch (Exception ex)
         {
@@ -28,16 +37,16 @@ public class RedisChatRepository : IChatRepository
     }
 
 
-    public Task<List<CommonLayer.Models.Message>> GetMessagesFromRoomAsync(string roomId)
+    public async Task<List<CommonLayer.Models.Message>> GetMessagesFromRoomAsync(string roomId)
     {
         try
         {
-            var messagesRedis = _redisDb.ListRange($"chat:{roomId}");
+            var messagesRedis = await _redisDb.ListRangeAsync($"chat:{roomId}");
             var messages = messagesRedis
                 .Select(msg => System.Text.Json.JsonSerializer.Deserialize<CommonLayer.Models.Message>(msg))
                 .Where(msg => msg != null)
                 .ToList();
-            return Task.FromResult(messages) as Task<List<CommonLayer.Models.Message>>;
+            return messages;
         }
         catch (Exception ex)
         {
