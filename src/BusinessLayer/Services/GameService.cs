@@ -28,10 +28,6 @@ public class GameService : IGameService
         _historyRepository = historyRepository;
     }
 
-    public async Task<GameRoom>? GetRoomAsync(string roomId)
-    {
-        return await _gameRoomRepository.GetByIdAsync(roomId);
-    }
 
     public async Task StartGameAsync(string roomId, int maxNumberOfRounds, int durationPerUserInSeconds, List<string> usernames)
     {
@@ -80,8 +76,10 @@ public class GameService : IGameService
                 state.GameFinishedStates = new GameFinishedStates();
                 var Ejected = await _gameRoomRepository.GetEdjectedPlayer(roomId);
                 var targetImpostor = await _gameRoomRepository.GetImpostorUsername(roomId);
-                //TODO proveri da li ovo radi i bez await
+                //TODO proveri da li ovo radi i bez await i nakon ovoga mora iz redisa da se obrise kompletna istorija igre!
                 await SaveGameHistory(roomId);
+                await _gameRoomRepository.DeleteAsync(roomId);
+                // Da obrise iz redisa sve o toj igri!
                 state.GameFinishedStates.ImpostorWon = (Ejected != targetImpostor);
                 break;
         }
@@ -242,37 +240,6 @@ public class GameService : IGameService
             Console.WriteLine($"Error getting clues from room: {ex.Message}");
             throw;
         }
-    }
-
-    public async Task<GameRoom?> AdvanceTurnAsync(string roomId)
-    {
-        var room = await _gameRoomRepository.GetByIdAsync(roomId);
-        if (room == null || room.Players == null || room.Players.Count == 0)
-            return null;
-
-        var sortedPlayers = room.Players.Values.OrderBy(p => p.UserId).ToList();
-        int currentIndex = sortedPlayers.FindIndex(p => p.UserId == room.CurrentTurnPlayerId);
-        if (currentIndex == -1) currentIndex = 0;
-
-        room.TurnsTakenInCurrentRound++;
-
-        if (room.TurnsTakenInCurrentRound >= sortedPlayers.Count)
-        {
-            room.State = GameState.Voting; 
-            room.TurnsTakenInCurrentRound = 0; 
-
-        }
-        else
-        {
-            int nextIndex = (currentIndex + 1) % sortedPlayers.Count;
-            var nextPlayer = sortedPlayers[nextIndex];
-
-            room.CurrentTurnPlayerId = nextPlayer.UserId;
-            room.CurrentTurnPlayerUsername = nextPlayer.Username;
-        }
-
-        await _gameRoomRepository.SaveAsync(room);
-        return room;
     }
 
     public async Task RegisterVoteAsync(Vote vote)

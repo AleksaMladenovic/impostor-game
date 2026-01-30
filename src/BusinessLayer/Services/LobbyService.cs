@@ -13,7 +13,7 @@ public class LobbyService : ILobbyService
     private readonly IGameRoomRepository _gameRoomRepository;
     private readonly ILobbyRepository _lobbyRepository;
     // Zavisimo od interfejsa, ne od konkretne Redis implementacije!
-    public LobbyService(IGameRoomRepository gameRoomRepository,  ILobbyRepository lobbyRepository)
+    public LobbyService(IGameRoomRepository gameRoomRepository, ILobbyRepository lobbyRepository)
     {
         _gameRoomRepository = gameRoomRepository;
         _lobbyRepository = lobbyRepository;
@@ -24,19 +24,19 @@ public class LobbyService : ILobbyService
         var roomId = Guid.NewGuid().ToString("N").Substring(0, 6).ToUpper();
 
         await _lobbyRepository.SaveAsync(roomId);
-        return  roomId;
+        return roomId;
     }
-    
-    
+
+
 
     public async Task JoinRoomAsync(string roomId, string username, string connectionId)
     {
-        if(await _lobbyRepository.DoesLobbyExistAsync(roomId) == false)
+        if (await _lobbyRepository.DoesLobbyExistAsync(roomId) == false)
         {
             throw new Exception($"Soba sa ID-em '{roomId}' ne postoji.");
         }
 
-        if(await _lobbyRepository.RoomContainsPlayerAsync(roomId, username))
+        if (await _lobbyRepository.RoomContainsPlayerAsync(roomId, username))
         {
             await _lobbyRepository.RecconectPlayerAsync(roomId, connectionId, username);
         }
@@ -78,8 +78,12 @@ public class LobbyService : ILobbyService
 
     public async Task RestartRoomAsync(string roomId)
     {
+        if (await _gameRoomRepository.GameStarted(roomId))
+        {
+            throw new Exception("Igra je u toku!");
+        }
         //TODO: Postoji bug ako pokrenu igru pa se neki onda restartuje, mora da se proveri da li igra nije pocela
-        if(!await _lobbyRepository.DoesLobbyExistAsync(roomId))
+        if (!await _lobbyRepository.DoesLobbyExistAsync(roomId))
         {
             await _lobbyRepository.SaveAsync(roomId);
         }

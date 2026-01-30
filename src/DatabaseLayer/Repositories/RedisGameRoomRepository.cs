@@ -17,67 +17,6 @@ public class RedisGameRoomRepository : IGameRoomRepository
         _redisDb = redis.GetDatabase();
     }
 
-    public async Task<GameRoom?> GetByIdAsync(string roomId)
-    {
-        var roomJson = await _redisDb.StringGetAsync($"room:{roomId}");
-        return roomJson.IsNullOrEmpty ? null : JsonSerializer.Deserialize<GameRoom>(roomJson!);
-    }
-
-    public async Task SaveAsync(GameRoom room)
-    {
-        var roomJson = JsonSerializer.Serialize(room);
-        await _redisDb.StringSetAsync($"room:{room.RoomId}", roomJson);
-    }
-
-    public async Task DeleteAsync(string roomId)
-    {
-        await _redisDb.KeyDeleteAsync($"room:{roomId}");
-    }
-
-    public async Task SaveRoomForUserId(string userId, string roomId)
-    {
-        // Čuva mapiranje userId -> roomId sa TTL od 24h 
-        // (u slučaju da se klijent diskonektor bez upozorenja)
-        await _redisDb.StringSetAsync($"conn:{userId}", roomId, TimeSpan.FromHours(24));
-    }
-
-    public async Task<string?> GetRoomFromUserId(string userId)
-    {
-        var roomId = await _redisDb.StringGetAsync($"conn:{userId}");
-        return roomId.IsNull ? null : roomId.ToString();
-    }
-
-    public async Task RemoveRoomForUserId(string userId)
-    {
-        await _redisDb.KeyDeleteAsync($"conn:{userId}");
-    }
-
-    public async Task SaveUserIdForConnection(string connectionId, string userId)
-    {
-        await _redisDb.StringSetAsync($"connuser:{connectionId}", userId);
-    }
-
-    public async Task<string?> GetUserIdForConnection(string connectionId)
-    {
-        var userId = await _redisDb.StringGetAsync($"connuser:{connectionId}");
-        return userId.IsNull ? null : userId.ToString();
-    }
-
-    public async Task RemoveUserIdForConnection(string connectionId)
-    {
-        await _redisDb.KeyDeleteAsync($"connuser:{connectionId}");
-    }
-
-    public async Task DeleteAsync(string roomId, int minutes)
-    {
-        await _redisDb.KeyExpireAsync($"room:{roomId}", TimeSpan.FromMinutes(minutes));
-    }
-
-    public async Task RemoveTimerForRoom(string roomId)
-    {
-        await _redisDb.KeyPersistAsync($"room:{roomId}");
-    }
-
     public async Task SetUsers(string roomId, List<string> usernames)
     {
         var key = $"game:room:{roomId}:users";
@@ -236,5 +175,37 @@ public class RedisGameRoomRepository : IGameRoomRepository
             .Select(h => JsonSerializer.Deserialize<GameHistoryEvent>(h.ToString(), jsonOptions))
             .Where(e => e != null)
             .ToList()!;
+    }
+
+    public async Task DeleteAsync(string roomId)
+    {
+        var deletes = new List<Task>
+        {
+            _redisDb.KeyDeleteAsync($"game:room:{roomId}:users"),
+            _redisDb.KeyDeleteAsync($"game:room:{roomId}:settings"),
+            _redisDb.KeyDeleteAsync($"game:room:{roomId}:state"),
+            _redisDb.KeyDeleteAsync($"game:room:{roomId}:currentRound"),
+            _redisDb.KeyDeleteAsync($"game:{roomId}:history"),
+            _redisDb.KeyDeleteAsync($"chat:{roomId}"),
+            _redisDb.KeyDeleteAsync($"clues:{roomId}")
+        };
+
+        string maxRoundKey = $"votemaxround:{roomId}";
+        var maxRoundRedis = await _redisDb.StringGetAsync(maxRoundKey);
+        int maxRound = maxRoundRedis.IsNullOrEmpty ? 0 : (int)maxRoundRedis;
+        for (int round = 1; round <= maxRound; round++)
+        {
+            deletes.Add(_redisDb.KeyDeleteAsync($"votes:{roomId}:{round}"));
+        }
+        deletes.Add(_redisDb.KeyDeleteAsync(maxRoundKey));
+
+        await Task.WhenAll(deletes);
+    }
+
+    public async Task<bool> GameStarted(string roomId)
+    {
+        // Provera settings key jer se postavlja pri početku igre i ne briše dok igra traje
+        var settingsKey = $"game:room:{roomId}:settings";
+        return await _redisDb.KeyExistsAsync(settingsKey);
     }
 }

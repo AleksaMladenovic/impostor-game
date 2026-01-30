@@ -96,11 +96,7 @@ public class GameHub : Hub
 
             await Clients.Group(roomId).SendAsync("ReceiveClue", clue);
 
-            var updatedRoom = await _gameService.AdvanceTurnAsync(roomId);
-            if (updatedRoom != null)
-            {
-                await Clients.Group(roomId).SendAsync("RoomUpdated", updatedRoom);
-            }
+            
         }
         catch (Exception ex)
         {

@@ -26,7 +26,14 @@ public class RoomsController : ControllerBase
     [HttpPost("{roomId}/restart")]
     public async Task<IActionResult> RestartRoom([FromRoute] string roomId)
     {
-        await _lobbyService.RestartRoomAsync(roomId);
-        return Ok();
+        try
+        {
+            await _lobbyService.RestartRoomAsync(roomId);
+            return Ok();
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(ex.Message);
+        }
     }
 }

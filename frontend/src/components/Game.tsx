@@ -301,8 +301,15 @@ const Game: React.FC = () => {
     // }, [isVotingPhase]);
 
     const onIgrajPonovo = async () => {
-        await api.post(`/Rooms/${roomId}/restart`);
-        navigate(`/lobby/${roomId}`);
+        try{
+            await api.post(`/Rooms/${roomId}/restart`);
+            navigate(`/lobby/${roomId}`);
+        } catch (error) {
+            alert("Igra je vec pocela!");
+            console.error("Greška pri ponovnom pokretanju igre:", error);
+            navigate(`/home`);
+            return;
+        }
 
     };
 
