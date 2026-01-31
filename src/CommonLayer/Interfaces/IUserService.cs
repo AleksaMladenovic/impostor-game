@@ -20,4 +20,8 @@ public interface IUserService
     Task IncrementWinsLikeCrewmate(string userId);
     Task IncrementWinsLikeImpostor(string userId);
     Task AddPoints(string userId, long points);
+    Task<List<LeaderboardEntry>> GetLeaderboardAsync();
+  
+    Task<List<LeaderboardEntry>> GetLeaderboardAsync(string sortBy);
+    
 }

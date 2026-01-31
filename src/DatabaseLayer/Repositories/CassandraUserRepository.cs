@@ -18,6 +18,7 @@ namespace DatabaseLayer.Repositories
         private PreparedStatement? _incrementWinsLikeCrewmateStatement;
         private PreparedStatement? _incrementWinsLikeImpostorStatement;
         private PreparedStatement? _addPointsStatement;
+        private PreparedStatement? _getAllUsersStatsStatement;
 
         private PreparedStatement? _getUserIdByUsernameStatement;
 
@@ -52,6 +53,8 @@ namespace DatabaseLayer.Repositories
 
             // INICIJALIZACIJA NOVOG STATEMENTA:
             _getUserIdByUsernameStatement = _session.Prepare("SELECT user_id FROM user_by_username WHERE username = ?");
+
+            _getAllUsersStatsStatement = _session.Prepare("SELECT user_id, games_played, wins_as_crewmate, wins_as_impostor, total_score FROM user_stats");
         }
 
         private GetUserResponse? MapRowsToUser(Row? userRow, Row? statsRow)
@@ -115,6 +118,34 @@ namespace DatabaseLayer.Repositories
         {
             var result = await _session.ExecuteAsync(_usernameAlreadyExistStatement!.Bind(username));
             return result.Any();
+        }
+        public async Task<List<LeaderboardEntry>> GetLeaderboardAsync()
+        {
+
+            var rows = await _session.ExecuteAsync(_getAllUsersStatsStatement.Bind());
+
+            return rows.Select(row => new LeaderboardEntry
+            {
+                Username = GetUserById(row.GetValue<string>("user_id")).Username,
+                GamesPlayed = row.GetValue<long?>("games_played") ?? 0,
+                WinsLikeCrewmate = row.GetValue<long?>("wins_as_crewmate") ?? 0,
+                WinsLikeImpostor = row.GetValue<long?>("wins_as_impostor") ?? 0,
+                TotalScore = row.GetValue<long?>("total_score") ?? 0
+            }).ToList();
+        }
+
+        public async Task<List<LeaderboardEntry>> GetLeaderboardAsync(string sortBy)
+        {
+            var entries = await GetLeaderboardAsync();
+
+            return sortBy.ToLower() switch
+            {
+                "games" => entries.OrderByDescending(x => x.GamesPlayed).ToList(),
+                "crewmate" => entries.OrderByDescending(x => x.WinsLikeCrewmate).ToList(),
+                "impostor" => entries.OrderByDescending(x => x.WinsLikeImpostor).ToList(),
+                "points" => entries.OrderByDescending(x => x.TotalScore).ToList(),
+                _ => entries.OrderByDescending(x => x.TotalScore).ToList() 
+            };
         }
     }
 }

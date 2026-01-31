@@ -86,6 +86,20 @@ namespace Backend.Controllers
             return Ok();
         }
 
+        [HttpGet("leaderboard")]
+        public async Task<IActionResult> GetLeaderboard([FromQuery] string sortBy = "points")
+        {
+            try
+            {
+                var leaderboard = await _userService.GetLeaderboardAsync(sortBy);
+                return Ok(leaderboard);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, "Greška pri učitavanju rang liste.");
+            }
+        }
+
         [HttpGet("usernameAlreadyExists/{username}")]
         public IActionResult UsernameAlreadyExist(string username)
         {

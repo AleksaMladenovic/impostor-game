@@ -6,7 +6,7 @@ import { useNavigate } from 'react-router-dom';
 import api from '../axios';
 import { useAuth } from '../context/AuthContext';
 import { PlaySquare, User } from 'lucide-react';
-
+import { BarChart3 } from 'lucide-react';
 
 function HomePage() {
     const [joinRoomIdInput, setJoinRoomIdInput] = useState('');
@@ -33,6 +33,24 @@ function HomePage() {
 
     return (
         <div className="min-h-screen bg-[#060608] flex items-center justify-center p-4 text-white font-sans relative overflow-hidden">
+
+            
+                {/* --- STATISTIKA / LEADERBOARD DUGME (Gornji levi ugao) --- */}
+            <div className="absolute top-8 left-8 z-50">
+                <motion.button
+                    whileHover={{ scale: 1.1, backgroundColor: "rgba(255,255,255,0.1)" }}
+                    whileTap={{ scale: 0.9 }}
+                    onClick={() => navigate('/statistics')}
+                    className="w-14 h-14 bg-white/5 border border-white/10 rounded-full flex items-center justify-center backdrop-blur-xl shadow-2xl transition-all group"
+                >
+                    <BarChart3 size={28} className="text-gray-400 group-hover:text-blue-400 transition-colors" />
+                    
+                    <span className="absolute top-16 left-0 bg-white text-black text-[10px] font-black px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity uppercase tracking-widest pointer-events-none">
+                        Ranking
+                    </span>
+                </motion.button>
+            </div>
+
 
 
 
