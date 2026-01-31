@@ -390,6 +390,7 @@ const Game: React.FC = () => {
                             onClueChange={setClue}
                             onSendClue={handleSendClue}
                             currentTurnUsername={currentTurnUsername}
+                            isVotingPhase = {isVotingPhase} 
                         />
 
                         <VotingModal
