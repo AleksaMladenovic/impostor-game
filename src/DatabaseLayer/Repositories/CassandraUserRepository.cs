@@ -99,9 +99,10 @@ namespace DatabaseLayer.Repositories
             batch.Add(_insertUserNameStatement!.Bind(user.Username, user.UserId));
 
             var initStats = _session.Prepare("UPDATE user_stats SET total_score = total_score + 0 WHERE user_id = ?");
-            batch.Add(initStats.Bind(user.UserId));
+            // batch.Add(initStats.Bind(user.UserId));
 
             await _session.ExecuteAsync(batch);
+            await _session.ExecuteAsync(initStats.Bind(user.UserId));
         }
 
         public Task UpdateAsync(User user) => throw new NotImplementedException();
