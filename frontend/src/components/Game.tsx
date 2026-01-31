@@ -401,14 +401,21 @@ const Game: React.FC = () => {
                             votedPlayers={votedPlayers}
                             onVote={handleVote}
                         />
+                        
+                        <EjectionScreen 
+                        show={showEjectionScreen}
+                        ejectedUsername={gameState?.voteResultStates?.ejectedUsername}
+                        wasImpostor={gameState?.voteResultStates?.wasImpostor}
+                    />
 
-                        <EjectionScreen
-                            show={showEjectionScreen}
-                            ejectedUsername={gameState?.voteResultStates?.ejectedUsername}
-                            wasImpostor={gameState?.voteResultStates?.wasImpostor}
-                        />
 
-                        <EndGameScreen show={showEndScreen} gameResult={gameResult} onIgrajPonovo={onIgrajPonovo}/>
+                        <EndGameScreen 
+                        show={showEndScreen} 
+                        gameState={gameState} 
+                        isImpostor={isImpostor} 
+                        onIgrajPonovo={onIgrajPonovo}
+                        onBackToHome={() => navigate('/home')} 
+                    />
 
                         <SecretWordPanel
                             roundNumber={roundNumber}

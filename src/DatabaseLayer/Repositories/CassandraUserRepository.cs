@@ -1,10 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Data;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using Cassandra;
+﻿using Cassandra;
 using CommonLayer.DTOs;
 using CommonLayer.Interfaces;
 using MyApp.CommonLayer.Models;
@@ -24,6 +18,9 @@ namespace DatabaseLayer.Repositories
         private PreparedStatement? _incrementWinsLikeCrewmateStatement;
         private PreparedStatement? _incrementWinsLikeImpostorStatement;
         private PreparedStatement? _addPointsStatement;
+        private PreparedStatement? _getAllUsersStatsStatement;
+
+        private PreparedStatement? _getUserIdByUsernameStatement;
 
         public CassandraUserRepository(ISession session)
         {
@@ -42,7 +39,6 @@ namespace DatabaseLayer.Repositories
             _createUserStatement = _session.Prepare("INSERT INTO users (user_id, username, email) " +
                 "VALUES (?, ?, ?)");
 
-
             _incrementPlayedGamesStatement = _session.Prepare("UPDATE user_stats SET games_played = games_played + 1 WHERE user_id = ?");
 
             _incrementWinsLikeCrewmateStatement = _session.Prepare("UPDATE user_stats SET wins_as_crewmate = wins_as_crewmate + 1 WHERE user_id = ?");
@@ -55,9 +51,11 @@ namespace DatabaseLayer.Repositories
 
             _usernameAlreadyExistStatement = _session.Prepare("SELECT username FROM user_by_username WHERE username = ?");
 
-        }
+            // INICIJALIZACIJA NOVOG STATEMENTA:
+            _getUserIdByUsernameStatement = _session.Prepare("SELECT user_id FROM user_by_username WHERE username = ?");
 
-       
+            _getAllUsersStatsStatement = _session.Prepare("SELECT user_id, games_played, wins_as_crewmate, wins_as_impostor, total_score FROM user_stats");
+        }
 
         private GetUserResponse? MapRowsToUser(Row? userRow, Row? statsRow)
         {
@@ -67,6 +65,7 @@ namespace DatabaseLayer.Repositories
                 UserId = userRow.GetValue<string>("user_id"),
                 Username = userRow.GetValue<string>("username"),
                 Email = userRow.GetValue<string>("email"),
+
                 GamesPlayed = statsRow?.GetValue<long?>("games_played") ?? 0,
                 WinsLikeCrewmate = statsRow?.GetValue<long?>("wins_as_crewmate") ?? 0,
                 WinsLikeImpostor = statsRow?.GetValue<long?>("wins_as_impostor") ?? 0,
@@ -74,76 +73,79 @@ namespace DatabaseLayer.Repositories
             };
         }
 
-        public Task CreateAsync(CreateUserInput user)
-        {
-            var batch = new BatchStatement();
-            var userStatement = _createUserStatement!.Bind(
-                user.UserId,
-                user.Username,
-                user.Email);
-
-            var userByUsername = _insertUserNameStatement!.Bind(
-                user.Username,
-                user.UserId);
-
-            batch.Add(userStatement);
-            batch.Add(userByUsername);
-
-            return _session.ExecuteAsync(batch);
-        }
-
         public GetUserResponse? GetUserById(string userId)
         {
-            var boundStatement = _getUserByIdStatement!.Bind(userId);
-            var userRow = _session.Execute(boundStatement);
-            var statsRow = _session.Execute(_getUserStatsStatement!.Bind(userId));
-            return MapRowsToUser(userRow.FirstOrDefault(), statsRow.FirstOrDefault());
+            var userRow = _session.Execute(_getUserByIdStatement!.Bind(userId)).FirstOrDefault();
+            var statsRow = _session.Execute(_getUserStatsStatement!.Bind(userId)).FirstOrDefault();
+            return MapRowsToUser(userRow, statsRow);
         }
 
-        public Task UpdateAsync(User user)
+        public GetUserResponse? GetUserByName(string userName)
         {
-            //var boundStatement = _updateUserStatement!.Bind(
-            //    user.Username,
-            //    user.Email,
-            //    user.GamesPlayed,
-            //    user.WinsLikeCrewmate,
-            //    user.WinsLikeImpostor,
-            //    user.TotalScore,
-            //    user.UserId);
+            var idRow = _session.Execute(_getUserIdByUsernameStatement!.Bind(userName)).FirstOrDefault();
 
-            //return _session.ExecuteAsync(boundStatement);
-            throw new NotImplementedException("Nije implementiran update jos uvek");
+            if (idRow == null) return null; 
+
+            string userId = idRow.GetValue<string>("user_id");
+
+            return GetUserById(userId);
         }
 
-        public Task IncrementPlayedGames(string userId)
+        public async Task CreateAsync(CreateUserInput user)
         {
-            var boundStatement = _incrementPlayedGamesStatement!.Bind(userId);
-            return _session.ExecuteAsync(boundStatement);
+            var batch = new BatchStatement();
+
+            batch.Add(_createUserStatement!.Bind(user.UserId, user.Username, user.Email));
+            batch.Add(_insertUserNameStatement!.Bind(user.Username, user.UserId));
+
+            var initStats = _session.Prepare("UPDATE user_stats SET total_score = total_score + 0 WHERE user_id = ?");
+            batch.Add(initStats.Bind(user.UserId));
+
+            await _session.ExecuteAsync(batch);
         }
 
-        public Task IncrementWinsLikeCrewmate(string userId)
+        public Task UpdateAsync(User user) => throw new NotImplementedException();
+
+        public Task IncrementPlayedGames(string userId) => _session.ExecuteAsync(_incrementPlayedGamesStatement!.Bind(userId));
+
+        public Task IncrementWinsLikeCrewmate(string userId) => _session.ExecuteAsync(_incrementWinsLikeCrewmateStatement!.Bind(userId));
+
+        public Task IncrementWinsLikeImpostor(string userId) => _session.ExecuteAsync(_incrementWinsLikeImpostorStatement!.Bind(userId));
+
+        public Task AddPoints(string userId, long points) => _session.ExecuteAsync(_addPointsStatement!.Bind(points, userId));
+
+        public async Task<bool> UsernameAlreadyExist(string username)
         {
-            var boundStatement = _incrementWinsLikeCrewmateStatement!.Bind(userId);
-            return _session.ExecuteAsync(boundStatement);
+            var result = await _session.ExecuteAsync(_usernameAlreadyExistStatement!.Bind(username));
+            return result.Any();
+        }
+        public async Task<List<LeaderboardEntry>> GetLeaderboardAsync()
+        {
+
+            var rows = await _session.ExecuteAsync(_getAllUsersStatsStatement.Bind());
+
+            return rows.Select(row => new LeaderboardEntry
+            {
+                Username = GetUserById(row.GetValue<string>("user_id")).Username,
+                GamesPlayed = row.GetValue<long?>("games_played") ?? 0,
+                WinsLikeCrewmate = row.GetValue<long?>("wins_as_crewmate") ?? 0,
+                WinsLikeImpostor = row.GetValue<long?>("wins_as_impostor") ?? 0,
+                TotalScore = row.GetValue<long?>("total_score") ?? 0
+            }).ToList();
         }
 
-        public Task IncrementWinsLikeImpostor(string userId)
+        public async Task<List<LeaderboardEntry>> GetLeaderboardAsync(string sortBy)
         {
-            var boundStatement = _incrementWinsLikeImpostorStatement!.Bind(userId);
-            return _session.ExecuteAsync(boundStatement);
-        }
+            var entries = await GetLeaderboardAsync();
 
-        public Task AddPoints(string userId, long points)
-        {
-            var boundStatement = _addPointsStatement!.Bind(points, userId);
-            return _session.ExecuteAsync(boundStatement);
-        }
-
-        public Task<bool> UsernameAlreadyExist(string username)
-        {
-            var boundStatement = _usernameAlreadyExistStatement!.Bind(username);
-            var result = _session.Execute(boundStatement);
-            return Task.FromResult(result.Any());
+            return sortBy.ToLower() switch
+            {
+                "games" => entries.OrderByDescending(x => x.GamesPlayed).ToList(),
+                "crewmate" => entries.OrderByDescending(x => x.WinsLikeCrewmate).ToList(),
+                "impostor" => entries.OrderByDescending(x => x.WinsLikeImpostor).ToList(),
+                "points" => entries.OrderByDescending(x => x.TotalScore).ToList(),
+                _ => entries.OrderByDescending(x => x.TotalScore).ToList() 
+            };
         }
     }
 }
