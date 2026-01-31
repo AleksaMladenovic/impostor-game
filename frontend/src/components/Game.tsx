@@ -402,13 +402,16 @@ const Game: React.FC = () => {
                             onVote={handleVote}
                         />
 
-                        <EjectionScreen
-                            show={showEjectionScreen}
-                            ejectedUsername={gameState?.voteResultStates?.ejectedUsername}
-                            wasImpostor={gameState?.voteResultStates?.wasImpostor}
-                        />
-
-                        <EndGameScreen show={showEndScreen} gameResult={gameResult} onIgrajPonovo={onIgrajPonovo}/>
+                        <EndGameScreen 
+                        show={showEndScreen} 
+                        gameState={gameState} 
+                        isImpostor={isImpostor} 
+                        onIgrajPonovo={() => {
+                            // Ovde stavi logiku da se igrači vrate u lobi ili restartuju stanje
+                            connection?.invoke("PlayAgain", roomId); 
+                        }}
+                        onBackToHome={() => navigate('/home')} 
+                    />
 
                         <SecretWordPanel
                             roundNumber={roundNumber}

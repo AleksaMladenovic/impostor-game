@@ -12,6 +12,7 @@ namespace CommonLayer.Interfaces;
 public interface IUserService
 {
     GetUserResponse? GetUserById(string userId);
+    GetUserResponse? GetUserByName(string userName);
     Task CreateAsync(CreateUserInput user);
     Task<bool> UsernameAlreadyExist(string username);
     Task UpdateAsync(User user);

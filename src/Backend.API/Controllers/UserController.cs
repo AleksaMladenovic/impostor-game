@@ -29,6 +29,28 @@ namespace Backend.Controllers
             return Ok(user);
         }
 
+        [HttpGet("profile/{username}")]
+        public IActionResult GetUserProfile(string username)
+        {
+            try
+            {
+                // Pozivamo metodu koju smo upravo ispravili u Repository-ju
+                var userProfile = _userService.GetUserByName(username);
+
+                if (userProfile == null)
+                {
+                    return NotFound(new { message = $"Operativac sa imenom '{username}' nije pronađen u bazi." });
+                }
+
+                return Ok(userProfile);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Greška pri dohvatanju profila ({username}): {ex.Message}");
+                return StatusCode(500, new { message = "Sistemska greška pri učitavanju dosijea." });
+            }
+        }
+
         [HttpPost("create")]
         public IActionResult CreateUser([FromBody] CreateUserInput user)
         {

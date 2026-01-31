@@ -3,6 +3,7 @@ import StartPage from "./components/StartPage"; // Putanja do tvog novog Home fa
 import Login from "./components/Login"; // Tvoja login stranica
 import Register from "./components/Register"; // Tvoja register stranica
 import HomePage from "./components/HomePage"; // Ono što si mi malopre pokazao (sa kreriranjem sobe)
+import ProfilePage from "./components/ProfilePage";
 import ProtectedRoute from "./components/ProtectedRoute";
 import { AuthProvider } from "./context/AuthContext";
 import VerifyEmail from "./components/VerifyEmail";
@@ -29,6 +30,11 @@ function App() {
           <Route path="/lobby/:roomId" element={
             <ProtectedRoute>
               <Lobby />
+            </ProtectedRoute>
+          } />
+            <Route path="/profile/:username" element={
+            <ProtectedRoute>
+              <ProfilePage />
             </ProtectedRoute>
           } />
           <Route path="/game/:roomId" element={
