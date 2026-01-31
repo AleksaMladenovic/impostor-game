@@ -17,7 +17,7 @@ public class GameService : IGameService
     private readonly IVoteRepository _voteRepository;
     private readonly IClueRepository _clueRepository;
     private readonly IHistoryRepository _historyRepository;
-    public GameService(IGameRoomRepository gameRoomRepository, ISecretWordService secretWordService, IChatRepository chatRepository,IClueRepository clueRepository,IUserService user,IVoteRepository voteRepository, IHistoryRepository historyRepository)
+    public GameService(IGameRoomRepository gameRoomRepository, ISecretWordService secretWordService, IChatRepository chatRepository, IClueRepository clueRepository, IUserService user, IVoteRepository voteRepository, IHistoryRepository historyRepository)
     {
         _gameRoomRepository = gameRoomRepository;
         _secretWordService = secretWordService;
@@ -31,23 +31,23 @@ public class GameService : IGameService
 
     public async Task StartGameAsync(string roomId, int maxNumberOfRounds, int durationPerUserInSeconds, List<string> usernames)
     {
-        GameStatesInSeconds.Values[ (int)GameState.InProgress ] = durationPerUserInSeconds;
+        GameStatesInSeconds.Values[(int)GameState.InProgress] = durationPerUserInSeconds;
         string secretWord = await _secretWordService.GetRandomSecretWordAsync();
         await _gameRoomRepository.SetUsers(roomId, usernames);
         await _gameRoomRepository.SetStartingSettings(roomId,
-            maxNumberOfRounds, 
-            durationPerUserInSeconds, 
-            usernames[Random.Shared.Next(usernames.Count)], 
+            maxNumberOfRounds,
+            durationPerUserInSeconds,
+            usernames[Random.Shared.Next(usernames.Count)],
             usernames[Random.Shared.Next(usernames.Count)],
             secretWord
             );
         await _gameRoomRepository.SetNewState(roomId, GameState.ShowSecret, durationPerUserInSeconds);
     }
- 
+
     public async Task<ReturnState> GetStateAsync(string roomId)
     {
         var state = await _gameRoomRepository.GetCurrentState(roomId);
-        switch(state.State)
+        switch (state.State)
         {
             case GameState.ShowSecret:
                 state.ShowSecretStates = await _gameRoomRepository.GetShowSecretStateDetails(roomId);
@@ -147,30 +147,24 @@ public class GameService : IGameService
                 nextStateDuration = 5;
                 break;
 
-                case GameState.VoteResult:
+            case GameState.VoteResult:
                 {
-                    var lastEjected = await _gameRoomRepository.GetEdjectedPlayer(roomId); 
+                    var lastEjected = await _gameRoomRepository.GetEdjectedPlayer(roomId);
                     var round = await _gameRoomRepository.GetCurrentRound(roomId);
                     var maxR = await _gameRoomRepository.GetMaxNumberOfRounds(roomId);
 
                     bool someoneEjected = !string.IsNullOrEmpty(lastEjected) && lastEjected != "skip";
 
-                    if (someoneEjected)
+                    if (someoneEjected || round >= maxR)
                     {
-                        nextState = GameState.GameFinished;
-                        nextStateDuration = 0;
-                        break;
-                    }
+                        await UpdateUserStatisticsAsync(roomId);
 
-                    if (round >= maxR)
-                    {
                         nextState = GameState.GameFinished;
                         nextStateDuration = 0;
                         break;
                     }
 
                     await _gameRoomRepository.IncrementAndGetCurrentRound(roomId);
-
                     var firstPlayers = await _gameRoomRepository.GetFirstPlayer(roomId);
                     await _gameRoomRepository.UpdateCurrentPlayer(roomId, firstPlayers);
 
@@ -244,14 +238,49 @@ public class GameService : IGameService
 
     public async Task RegisterVoteAsync(Vote vote)
     {
-        await _voteRepository.AddVoteAsync( vote);
+        await _voteRepository.AddVoteAsync(vote);
     }
 
     public async Task SaveGameHistory(string roomId)
     {
         var listaEventa = await _gameRoomRepository.GetHistory(roomId);
         var listaIgraca = await _gameRoomRepository.GetUsers(roomId);
-        await _historyRepository.SaveGameAsync(listaIgraca,roomId, listaEventa);
+        await _historyRepository.SaveGameAsync(listaIgraca, roomId, listaEventa);
+    }
+
+
+    private async Task UpdateUserStatisticsAsync(string roomId)
+    {
+        var usersInRoom = await _gameRoomRepository.GetUsers(roomId);
+        var impostorUsername = await _gameRoomRepository.GetImpostorUsername(roomId);
+        var ejectedPlayer = await _gameRoomRepository.GetEdjectedPlayer(roomId);
+
+        bool impostorWon = (ejectedPlayer != impostorUsername);
+
+        foreach (var username in usersInRoom)
+        {
+            var user = _userService.GetUserByName(username);
+            if (user == null) continue;
+
+            _userService.IncrementPlayedGames(user.UserId);
+
+            if (username == impostorUsername)
+            {
+                if (impostorWon)
+                {
+                    _userService.IncrementWinsLikeImpostor(user.UserId);
+                    _userService.AddPoints(user.UserId, 5);
+                }
+            }
+            else
+            {
+                if (!impostorWon)
+                {
+                    _userService.IncrementWinsLikeCrewmate(user.UserId);
+                    _userService.AddPoints(user.UserId, 3);
+                }
+            }
+        }
     }
 }
 

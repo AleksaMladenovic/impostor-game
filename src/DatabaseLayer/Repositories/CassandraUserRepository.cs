@@ -63,10 +63,10 @@ namespace DatabaseLayer.Repositories
                 Username = userRow.GetValue<string>("username"),
                 Email = userRow.GetValue<string>("email"),
 
-                GamesPlayed = statsRow?.GetValue<long>("games_played") ?? 0,
-                WinsLikeCrewmate = statsRow?.GetValue<long>("wins_as_crewmate") ?? 0,
-                WinsLikeImpostor = statsRow?.GetValue<long>("wins_as_impostor") ?? 0,
-                TotalScore = statsRow?.GetValue<long>("total_score") ?? 0
+                GamesPlayed = statsRow?.GetValue<long?>("games_played") ?? 0,
+                WinsLikeCrewmate = statsRow?.GetValue<long?>("wins_as_crewmate") ?? 0,
+                WinsLikeImpostor = statsRow?.GetValue<long?>("wins_as_impostor") ?? 0,
+                TotalScore = statsRow?.GetValue<long?>("total_score") ?? 0
             };
         }
 
