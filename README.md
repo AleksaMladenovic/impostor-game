@@ -154,7 +154,6 @@ impostor-game/
     │
     └── DatabaseLayer/           # Data access
         ├── Repositories/        # Repository pattern implementacije
-        └── schema_game_history.cql  # Cassandra schema
 ```
 
 ## 🎯 Opis igre
