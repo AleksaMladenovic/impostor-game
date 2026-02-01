@@ -25,6 +25,7 @@ public class CassandraHistoryRepository : IHistoryRepository
     private PreparedStatement? _getNextEventsStatement;
     private PreparedStatement? _getEventsFromTimeStatement;
     private PreparedStatement? _getNextSignificantEventStatement;
+    private PreparedStatement? _getGameHistoryStatement;
 
     public CassandraHistoryRepository(ISession session)
     {
@@ -70,6 +71,10 @@ public class CassandraHistoryRepository : IHistoryRepository
 
         _getEventsFromTimeStatement = _session.Prepare(
             "SELECT * FROM game_events WHERE game_id = ? AND event_time >= ? AND event_time <= ?"
+        );
+
+        _getGameHistoryStatement = _session.Prepare(
+            "SELECT players, room_id, end_time FROM game_history WHERE game_id = ?"
         );
     }
 
@@ -361,17 +366,35 @@ public class CassandraHistoryRepository : IHistoryRepository
     {
         try
         {
+            // Prvo pročitaj osnovne informacije o igri (igrači, room_id)
+            var gameHistoryBound = _getGameHistoryStatement!.Bind(gameId);
+            var gameHistoryRowSet = await _session.ExecuteAsync(gameHistoryBound);
+            var gameHistoryRow = gameHistoryRowSet.FirstOrDefault();
+
+            if (gameHistoryRow == null)
+                return null;
+
+            var playersJson = gameHistoryRow.GetValue<string>("players");
+            var roomId = gameHistoryRow.GetValue<string>("room_id");
+            var endTime = gameHistoryRow.GetValue<DateTimeOffset>("end_time").DateTime;
+            var players = JsonConvert.DeserializeObject<List<string>>(playersJson) ?? new List<string>();
+
+            // Zatim učitaj sve događaje
             var bound = _getEventsFromTimeStatement!.Bind(gameId, DateTime.MinValue, DateTime.MaxValue);
             var rowSet = await _session.ExecuteAsync(bound);
 
             var game = new OdigranaPartijaZaVracanje
             {
                 Id = gameId.ToString(),
-                RoomId = gameId.ToString(),
+                RoomId = roomId,
+                Igraci = players,
+                VremeKraja = endTime,
                 CluoviPoRundi = new Dictionary<int, Dictionary<string, string>>(),
                 GlasanjaPoRundi = new Dictionary<int, Dictionary<string, string>>(),
                 Poruke = new List<Message>()
             };
+
+            int maxRound = 0;
 
             foreach (var row in rowSet)
             {
@@ -380,6 +403,10 @@ public class CassandraHistoryRepository : IHistoryRepository
                 var eventTime = row.GetValue<DateTimeOffset>("event_time").DateTime;
                 var eventRound = row.GetValue<int?>("event_round") ?? 0;
                 if (eventRound <= 0) eventRound = 1;
+
+                // Prati maksimalnu rundu
+                if (eventRound > maxRound)
+                    maxRound = eventRound;
 
                 switch (eventType)
                 {
@@ -405,6 +432,8 @@ public class CassandraHistoryRepository : IHistoryRepository
                         break;
                 }
             }
+
+            game.BrojRundi = maxRound;
 
             return game;
         }
