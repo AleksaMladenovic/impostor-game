@@ -25,6 +25,7 @@ export interface IShowSecretStates {
     secretWord: string;
     impostorName: string;
     players: string[];
+    clueTime: number;
 }
 
 export interface IInProgressStates {

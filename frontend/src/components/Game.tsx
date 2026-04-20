@@ -41,6 +41,7 @@ const Game: React.FC = () => {
     const [maxRounds, setMaxRounds] = useState<number>(1);
     const [secretWord, setSecretWord] = useState<string>("");
     const [numOfPlayers, setNumOfPlayers] = useState<number>(0);
+    const [clueTime, setClueTime] = useState<number>(30);
     const lastStateEndedRef = React.useRef<number | null>(null);
     const navigate = useNavigate();
     const timeoutSentKeyRef = React.useRef<string | null>(null);
@@ -150,6 +151,7 @@ const Game: React.FC = () => {
 
     // 2. Logika tajmera - Resetuje se kada se promeni currentRoom (novi igrač)
     useEffect(() => {
+        console.log("Desilo se!");
         if (showIntro || showEndScreen || timeLeft <= 0) return;
         const interval = setInterval(() => setTimeLeft((prev) => prev - 1), 1000);
         return () => clearInterval(interval);
@@ -182,6 +184,7 @@ const Game: React.FC = () => {
                 setSecretWord(gameState.showSecretStates?.secretWord || "");
                 setPlayers(gameState.showSecretStates?.players || []);
                 setNumOfPlayers(gameState.showSecretStates?.players.length || 0);
+                setClueTime(gameState.showSecretStates?.clueTime || 30);
                 setShowIntro(true); // Tek sad palimo intro
                 break;
 
@@ -195,7 +198,7 @@ const Game: React.FC = () => {
                 setIsVotingPhase(false);
                 setVotedPlayers([]);
                 setMaxRounds(gameState.inProgressStates?.maxRounds || 1);
-                setTimeLeft(30); // Resetuj lokalni tajmer
+                setTimeLeft(clueTime); // Resetuj lokalni tajmer
                 break;
 
             case GameState.Voting:

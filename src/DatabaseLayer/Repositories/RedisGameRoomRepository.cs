@@ -75,12 +75,34 @@ public class RedisGameRoomRepository : IGameRoomRepository
         var settingsKey = $"game:room:{roomId}:settings";
         var secretWord = await _redisDb.HashGetAsync(settingsKey, "SecretWord");
         var impostorUsername = await _redisDb.HashGetAsync(settingsKey, "ImpostorUsername");
+        var durationPerUserInSecconds = await _redisDb.HashGetAsync(settingsKey, "DurationPerUserInSeconds");
         var usernames = await GetUsers(roomId);
+
+        // Safe conversion from RedisValue to int
+        int clueTime = 0;
+        if (!durationPerUserInSecconds.IsNullOrEmpty)
+        {
+            // Prefer TryParse on the string representation
+            if (!int.TryParse(durationPerUserInSecconds.ToString(), out clueTime))
+            {
+                // Fallback: try direct RedisValue numeric cast (may throw if not numeric)
+                try
+                {
+                    clueTime = (int)durationPerUserInSecconds;
+                }
+                catch
+                {
+                    clueTime = 0;
+                }
+            }
+        }
+
         return new ShowSecretStates
         {
             SecretWord = secretWord.ToString() ?? "",
             ImpostorName = impostorUsername.ToString() ?? "",
-            Players = usernames
+            Players = usernames,
+            ClueTime = clueTime
         };
     }
 

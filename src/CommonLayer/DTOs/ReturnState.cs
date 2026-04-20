@@ -18,6 +18,7 @@ public class ShowSecretStates
     public required string SecretWord { get; set; }
     public required string ImpostorName { get; set; }
     public required List<string> Players { get; set; }
+    public required int ClueTime { get; set; }
 }
 
 public class InProgressStates
